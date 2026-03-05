@@ -31,5 +31,10 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Build and Distribution
+dist/
+build/
+*.spec
+
 # Static library files (optional - if you want to keep them in git, remove this)
 # static/lib/
