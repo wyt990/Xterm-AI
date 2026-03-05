@@ -1,0 +1,35 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Databases
+config/xterm.db
+*.sqlite3
+
+# Environment variables
+.env
+.venv/
+venv/
+env/
+
+# Documentation (Optional - user requested exclusion)
+docs/
+
+# Logs
+logs/
+*.log
+
+# Editor backups
+.vscode/
+.idea/
+*.swp
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Static library files (optional - if you want to keep them in git, remove this)
+# static/lib/
