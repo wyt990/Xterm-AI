@@ -1,0 +1,27 @@
+<!-- 弹窗：查看日志 -->
+<div id="logs-modal" class="modal">
+    <div class="modal-content" style="width: 80%; max-width: 1000px; height: 80vh; display: flex; flex-direction: column;">
+        <div class="modal-header">
+            <h3>系统日志查看</h3>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <select id="log-file-select" class="form-control" style="width: 200px; background: #3c3c3c; border: 1px solid #555; color: white; padding: 5px; border-radius: 4px;">
+                    <option value="">加载中...</option>
+                </select>
+                <select id="log-lines-select" class="form-control" style="width: 100px; background: #3c3c3c; border: 1px solid #555; color: white; padding: 5px; border-radius: 4px;">
+                    <option value="100">100 行</option>
+                    <option value="500" selected>500 行</option>
+                    <option value="1000">1000 行</option>
+                    <option value="2000">2000 行</option>
+                </select>
+                <button class="btn btn-sm btn-primary" onclick="loadLogContent()"><i class="fas fa-sync"></i> 刷新</button>
+                <span class="close" onclick="closeModal('logs-modal')" style="margin-left: 10px;">&times;</span>
+            </div>
+        </div>
+        <div id="log-content-viewer" style="flex: 1; background: #000; color: #ddd; padding: 15px; font-family: monospace; overflow: auto; white-space: pre-wrap; font-size: 0.85rem; border: 1px solid #333; margin-top: 10px; border-radius: 4px;">
+            选择日志文件并点击刷新进行查看...
+        </div>
+        <div class="modal-footer" style="padding-top: 15px;">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('logs-modal')">关闭</button>
+        </div>
+    </div>
+</div>

@@ -3,11 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XTerm AI - 智能多端终端</title>
+    <title>XTerm-AI - 智能运维终端</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💻</text></svg>">
-    <link rel="stylesheet" href="/static/css/xterm.css" />
-    <link rel="stylesheet" href="/static/css/fontawesome.min.css" />
-    <link rel="stylesheet" href="/frontend/style.css?v=1.5" />
+    <link rel="stylesheet" href="/static/css/xterm.css?v=1.2">
+    <link rel="stylesheet" href="/static/lib/fontawesome/css/all.min.css?v=1.2">
+    <!-- 拆分后的模块化样式表 -->
+    <link rel="stylesheet" href="/frontend/css/base.css?v=1.3">
+    <link rel="stylesheet" href="/frontend/css/modals.css?v=1.3">
+    <link rel="stylesheet" href="/frontend/css/layout.css?v=1.3">
+    <link rel="stylesheet" href="/frontend/css/terminal.css?v=1.3">
+    <link rel="stylesheet" href="/frontend/css/ai_chat.css?v=1.3">
+    <link rel="stylesheet" href="/frontend/css/sftp.css?v=1.4">
+    <link rel="stylesheet" href="/frontend/css/editor.css?v=1.9">
 </head>
 <body>
     <div class="app-shell">
@@ -15,24 +22,24 @@
         <nav class="sidebar" id="sidebar">
             <div class="nav-brand">
                 <i class="fas fa-terminal"></i>
-                <span>XTerm AI</span>
-                <button id="toggle-sidebar" class="toggle-btn"><i class="fas fa-angle-left"></i></button>
+                <span>XTerm-AI</span>
+                <button id="toggle-sidebar" class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
             </div>
             <ul class="nav-menu">
                 <li class="nav-item active" data-view="terminal-view">
-                    <i class="fas fa-desktop"></i>
+                    <i class="fas fa-console"></i>
                     <span>控制台</span>
                 </li>
                 <li class="nav-item" data-view="server-list-view">
                     <i class="fas fa-server"></i>
-                    <span>服务器</span>
+                    <span>服务器管理</span>
                 </li>
                 <li class="nav-item" data-view="roles-view">
-                    <i class="fas fa-user-tag"></i>
-                    <span>角色设置</span>
+                    <i class="fas fa-user-robot"></i>
+                    <span>AI 角色</span>
                 </li>
                 <li class="nav-item" data-view="model-settings-view">
-                    <i class="fas fa-robot"></i>
+                    <i class="fas fa-brain"></i>
                     <span>模型设置</span>
                 </li>
                 <li class="nav-item" data-view="settings-view">
@@ -41,158 +48,149 @@
                 </li>
             </ul>
         </nav>
-        <div class="resizer" id="sidebar-resizer"></div>
+
+        <div id="sidebar-resizer" class="resizer"></div>
 
         <!-- 主内容区域 -->
         <main class="content">
-            <!-- 终端视图 (重构为多标签支持) -->
+            <!-- 终端视图 -->
             <div id="terminal-view" class="view active">
-                <div class="terminal-tabs-wrapper">
-                    <div class="terminal-tabs" id="terminal-tabs">
-                        <!-- 动态生成的标签 -->
-                    </div>
-                    <button class="new-tab-btn" id="add-tab-btn" title="新建连接"><i class="fas fa-plus"></i></button>
-                </div>
-                
-                <div class="terminal-header" style="border-top: none;">
-                    <div class="header-left">
-                        <span id="current-server-name">未连接服务器</span>
-                        <span id="active-role-badge" class="role-badge">默认角色</span>
-                    </div>
-                    <div class="header-actions">
-                        <button id="expand-ai-btn" class="btn btn-secondary btn-sm" style="display:none;"><i class="fas fa-comment-dots"></i> AI 对话</button>
-                        <button id="disconnect-btn" class="btn btn-danger btn-sm" style="display:none;">断开连接</button>
-                    </div>
-                </div>
-
                 <div class="app-container">
                     <div class="terminal-section">
-                        <!-- 终端容器容器切换区 -->
-                        <div id="terminal-stack">
-                            <!-- 动态生成的终端容器 -->
+                        <!-- 标签栏 -->
+                        <div class="tab-bar" id="tab-bar">
+                            <div class="add-tab-btn" onclick="showQuickConnect()" title="新建标签页"><i class="fas fa-plus"></i></div>
                         </div>
-                        
-                        <!-- 底部工具面板 -->
-                        <div class="resizer-h" id="bottom-panel-resizer"></div>
-                        <div id="bottom-panel" class="bottom-panel">
-                            <div class="panel-tabs">
-                                <div class="panel-tab active" data-tab="files-view"><i class="far fa-folder-open"></i> 文件</div>
-                                <div class="panel-tab" data-tab="commands-view"><i class="fas fa-code"></i> 命令</div>
-                                <div style="flex: 1;"></div>
-                                <button id="toggle-bottom-panel" class="panel-toggle-btn" title="显示/隐藏面板"><i class="fas fa-chevron-down"></i></button>
-                            </div>
-                            <div class="panel-body">
-                                <!-- 文件管理 (SFTP) -->
-                                <div id="files-view" class="panel-content active">
-                                    <div class="sftp-layout">
-                                        <div class="sftp-toolbar">
-                                            <button onclick="sftpGoBack()" title="返回上一级"><i class="fas fa-arrow-left"></i></button>
-                                            <button onclick="sftpRefresh()" title="刷新"><i class="fas fa-sync-alt"></i></button>
-                                            <div class="sftp-path-bar">
-                                                <input type="text" id="sftp-current-path" value="/">
-                                            </div>
-                                            <button class="btn btn-sm btn-primary" onclick="showUploadModal()"><i class="fas fa-upload"></i> 上传</button>
-                                        </div>
-                                        <div class="sftp-table-header">
-                                            <div class="col-name">名称</div>
-                                            <div class="col-size">大小</div>
-                                            <div class="col-mtime">修改时间</div>
-                                            <div class="col-mode">权限</div>
-                                        </div>
-                                        <div id="sftp-file-list" class="sftp-file-list">
-                                            <!-- 动态加载文件 -->
-                                        </div>
-                                        <!-- 隐藏的文件上传 input -->
-                                        <input type="file" id="sftp-upload-input" style="display: none;" multiple onchange="handleSftpUpload(event)">
-                                    </div>
-                                </div>
-                                <!-- 快捷命令管理 -->
-                                <div id="commands-view" class="panel-content">
-                                    <div class="commands-layout">
-                                        <div class="commands-sidebar">
-                                            <div class="commands-sidebar-header">
-                                                <span>分类</span>
-                                                <button onclick="showAddCommandGroupModal()" title="添加分类"><i class="fas fa-plus"></i></button>
-                                            </div>
-                                            <div id="command-groups-list" class="commands-groups-list">
-                                                <!-- 动态加载分组 -->
-                                            </div>
-                                        </div>
-                                        <div class="commands-main">
-                                            <div class="commands-toolbar">
-                                                <span id="current-group-name">未选择分类</span>
-                                                <div style="flex: 1;"></div>
-                                                <button class="btn btn-sm btn-primary" onclick="showAddCommandModal()"><i class="fas fa-plus"></i> 添加命令</button>
-                                            </div>
-                                            <div id="commands-list" class="commands-grid">
-                                                <!-- 动态加载命令 -->
-                                            </div>
-                                        </div>
+
+                        <!-- 终端容器堆栈 -->
+                        <div id="terminal-stack">
+                            <!-- 快速连接 / 历史记录页面 -->
+                            <div id="quick-connect-page" class="view active">
+                                <div class="quick-connect-container" style="padding: 40px; max-width: 800px; margin: 0 auto;">
+                                    <h2 style="margin-bottom: 30px;"><i class="fas fa-history"></i> 最近连接</h2>
+                                    <div id="connection-history-list" class="history-grid">
+                                        <!-- 历史记录列表 -->
+                                        <div class="empty-tip">暂无最近连接记录</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 快速连接页面 (对应图二) -->
-                        <div id="quick-connect-view" class="quick-connect-overlay">
-                            <div class="quick-connect-card">
-                                <div class="qc-header">
-                                    <h3>快速连接 / 历史记录</h3>
-                                    <button class="btn btn-sm btn-secondary" onclick="clearHistory()">清空记录</button>
+                        <!-- 底部交互面板的分隔线 -->
+                        <div id="bottom-panel-resizer" class="resizer-h"></div>
+                        
+                        <!-- 底部交互面板 -->
+                        <div id="bottom-panel" class="bottom-panel">
+                            <div class="bottom-panel-header">
+                                <div class="panel-tabs">
+                                    <div class="panel-tab active" data-panel="sftp-panel">文件</div>
+                                    <div class="panel-tab" data-panel="commands-panel">命令</div>
                                 </div>
-                                <div class="qc-list" id="history-list">
-                                    <!-- 历史记录项 -->
-                                    <div class="qc-empty">暂无连接记录，请从左侧服务器列表发起连接。</div>
+                                <button class="toggle-btn-small" id="toggle-bottom-panel" title="折叠/展开"><i class="fas fa-chevron-down"></i></button>
+                            </div>
+                            
+                            <!-- SFTP 文件管理器 -->
+                            <div id="sftp-panel" class="bottom-panel-content sftp-container active">
+                                <div class="sftp-toolbar">
+                                    <button class="btn-icon" onclick="sftpGoBack()" title="返回上级"><i class="fas fa-arrow-left"></i></button>
+                                    <button class="btn-icon" onclick="sftpRefresh()" title="刷新"><i class="fas fa-sync-alt"></i></button>
+                                    <div class="sftp-address-bar">
+                                        <i class="fas fa-folder-open" style="color: #666; margin-right: 8px;"></i>
+                                        <input type="text" id="sftp-current-path" value="/" onkeydown="if(event.keyCode==13) loadSftpFiles(this.value)">
+                                    </div>
+                                    <button class="btn btn-sm btn-primary" onclick="showUploadModal()" title="上传文件"><i class="fas fa-upload"></i> 上传</button>
+                                    <input type="file" id="sftp-upload-input" multiple style="display: none;" onchange="handleSftpUpload(event)">
+                                </div>
+                                <div class="sftp-file-list" id="sftp-file-list">
+                                    <!-- 文件列表头 -->
+                                    <div class="sftp-file-item header" style="font-weight: bold; border-bottom: 1px solid #333; position: sticky; top: 0; background: #1e1e1e; z-index: 5;">
+                                        <span class="file-icon"></span>
+                                        <span class="file-name">名称</span>
+                                        <span class="file-size">大小</span>
+                                        <span class="file-perms">权限</span>
+                                        <span class="file-time">修改时间</span>
+                                    </div>
+                                    <div id="sftp-files-container">
+                                        <!-- 动态加载文件内容 -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 常用命令列表 -->
+                            <div id="commands-panel" class="bottom-panel-content commands-container">
+                                <div class="commands-layout" style="display: flex; height: 100%;">
+                                    <div class="commands-sidebar" style="width: 150px; border-right: 1px solid #333; overflow-y: auto;">
+                                        <div class="commands-sidebar-header" style="padding: 8px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
+                                            <span style="font-size: 12px; color: #888;">分类</span>
+                                            <i class="fas fa-plus-circle" style="cursor: pointer; color: #0078d4;" onclick="showAddCommandGroupModal()"></i>
+                                        </div>
+                                        <div id="command-groups-list">
+                                            <!-- 分组列表 -->
+                                        </div>
+                                    </div>
+                                    <div class="commands-main" style="flex: 1; overflow-y: auto; padding: 10px;">
+                                        <div class="commands-main-header" style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                                            <span id="current-group-name" style="font-weight: bold; color: #eee;">常用命令</span>
+                                            <button class="btn btn-sm btn-primary" onclick="showAddCommandModal()"><i class="fas fa-plus"></i> 添加命令</button>
+                                        </div>
+                                        <div id="commands-grid" class="commands-grid">
+                                            <!-- 命令磁贴列表 -->
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="resizer" id="ai-resizer"></div>
+
+                    <div id="ai-resizer" class="resizer"></div>
+
+                    <!-- AI 面板折叠/展开浮动按钮（始终可见，不受 overflow:hidden 影响） -->
+                    <div id="ai-toggle-strip" title="折叠/展开 AI 面板">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+
+                    <!-- 右侧 AI 对话栏 -->
                     <div class="ai-section" id="ai-section">
-                        <div class="sidebar-tabs">
-                            <div class="sidebar-tab active" data-tab="ai-chat-content">AI 对话</div>
-                            <div class="sidebar-tab" data-tab="server-info-content">系统信息</div>
+                        <!-- 标签页 -->
+                        <div class="stats-tabs">
+                            <div class="stats-tab active" data-tab="ai-chat">AI 对话</div>
+                            <div class="stats-tab" data-tab="sys-info">系统信息</div>
                         </div>
                         
-                        <!-- AI 对话内容区 -->
-                        <div id="ai-chat-content" class="tab-content active">
+                        <div id="ai-chat-view" class="stats-tab-content active">
                             <div class="ai-header">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <button id="toggle-ai" class="toggle-btn-small"><i class="fas fa-angle-right"></i></button>
-                                    <h3>AI 运维助手</h3>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <div class="status-dot" id="ai-status"></div>
+                                    <span style="font-size: 0.9rem; font-weight: bold;">智能运维助手</span>
                                 </div>
-                                <span id="ai-status" class="status-dot"></span>
-                            </div>
-                            <div id="ai-chat-messages" class="ai-messages">
-                                <div class="message system">你好！请先在服务器列表中选择一个服务器连接。</div>
-                            </div>
-                        <div class="ai-input-area">
-                            <textarea id="ai-input" placeholder="向AI助手提问... (Enter 发送, Shift+Enter 换行)" rows="3"></textarea>
-                            <div class="ai-input-toolbar">
-                                <div class="ai-mode-select-wrapper">
-                                    <select id="ai-mode-select">
-                                        <option value="agent">🤖 Agent</option>
-                                        <option value="ask">💬 Ask</option>
+                                <div style="display: flex; gap: 8px;">
+                                    <select id="ai-mode-select" style="background: #3c3c3c; color: #eee; border: 1px solid #555; font-size: 12px; padding: 2px 5px; border-radius: 4px;">
+                                        <option value="agent">Agent 模式</option>
+                                        <option value="ask">Ask 模式</option>
                                     </select>
+                                    <button id="clear-chat-btn" class="btn-icon" title="清空对话" onclick="clearChat()"><i class="fas fa-trash-alt"></i></button>
                                 </div>
-                                <button class="btn-icon" id="clear-chat-btn" title="清空记录"><i class="fas fa-trash-alt"></i></button>
-                                <div style="flex: 1;"></div>
-                                <button id="send-btn" class="btn-send">
-                                    <span class="send-label"><i class="fas fa-paper-plane"></i> 发送</span>
-                                    <span class="stop-label"><i class="fas fa-stop-circle"></i> 停止</span>
+                            </div>
+                            <div class="ai-messages" id="ai-messages">
+                                <!-- 消息内容 -->
+                            </div>
+                            <div class="ai-input-area">
+                                <textarea id="ai-input" placeholder="输入运维指令或问题..."></textarea>
+                                <button id="send-btn" title="发送 (Enter)">
+                                    <i class="fas fa-paper-plane"></i>
                                 </button>
                             </div>
                         </div>
-                        </div>
 
-                        <!-- 系统信息内容区 -->
-                        <div id="server-info-content" class="tab-content">
-                            <div class="info-scroll-container">
+                        <div id="sys-info-view" class="stats-tab-content">
+                            <!-- 系统信息视图内容 -->
+                            <div class="info-container">
                                 <div class="info-section">
-                                    <div class="info-row"><span>IP:</span> <span id="info-ip">-</span></div>
-                                    <div class="info-row"><span>运行:</span> <span id="info-uptime">-</span></div>
-                                    <div class="info-row"><span>负载:</span> <span id="info-load">-</span></div>
+                                    <div class="info-row"><span>主机名:</span> <span id="info-hostname">-</span></div>
+                                    <div class="info-row"><span>系统:</span> <span id="info-os">-</span></div>
+                                    <div class="info-row"><span>运行时间:</span> <span id="info-uptime">-</span></div>
+                                    <div class="info-row"><span>内网 IP:</span> <span id="info-ip">-</span></div>
+                                    <div class="info-row"><span>平均负载:</span> <span id="info-load">-</span></div>
                                 </div>
                                 
                                 <div class="info-section">
@@ -314,382 +312,8 @@
         </main>
     </div>
 
-    <!-- 弹窗：查看日志 -->
-    <div id="logs-modal" class="modal">
-        <div class="modal-content" style="width: 80%; max-width: 1000px; height: 80vh; display: flex; flex-direction: column;">
-            <div class="modal-header">
-                <h3>系统日志查看</h3>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <select id="log-file-select" class="form-control" style="width: 200px; background: #3c3c3c; border: 1px solid #555; color: white; padding: 5px; border-radius: 4px;">
-                        <option value="">加载中...</option>
-                    </select>
-                    <select id="log-lines-select" class="form-control" style="width: 100px; background: #3c3c3c; border: 1px solid #555; color: white; padding: 5px; border-radius: 4px;">
-                        <option value="100">100 行</option>
-                        <option value="500" selected>500 行</option>
-                        <option value="1000">1000 行</option>
-                        <option value="2000">2000 行</option>
-                    </select>
-                    <button class="btn btn-sm btn-primary" onclick="loadLogContent()"><i class="fas fa-sync"></i> 刷新</button>
-                    <span class="close" onclick="closeModal('logs-modal')" style="margin-left: 10px;">&times;</span>
-                </div>
-            </div>
-            <div id="log-content-viewer" style="flex: 1; background: #000; color: #ddd; padding: 15px; font-family: monospace; overflow: auto; white-space: pre-wrap; font-size: 0.85rem; border: 1px solid #333; margin-top: 10px; border-radius: 4px;">
-                选择日志文件并点击刷新进行查看...
-            </div>
-            <div class="modal-footer" style="padding-top: 15px;">
-                <button type="button" class="btn btn-secondary" onclick="closeModal('logs-modal')">关闭</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 弹窗：服务器 -->
-    <div id="server-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="server-modal-title">添加服务器</h3>
-                <span class="close" onclick="closeModal('server-modal')">&times;</span>
-            </div>
-            <form id="server-form">
-                <input type="hidden" name="id" id="server-id">
-                <div class="form-group"><label>名称</label><input type="text" name="name" required></div>
-                <div class="form-row">
-                    <div class="form-group"><label>主机</label><input type="text" name="host" required></div>
-                    <div class="form-group"><label>端口</label><input type="number" name="port" value="22"></div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group"><label>账号</label><input type="text" name="username" value="root"></div>
-                    <div class="form-group"><label>密码</label><input type="password" name="password"></div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group"><label>分组</label><input type="text" name="group_name" placeholder="default"></div>
-                    <div class="form-group">
-                        <label>类型</label>
-                        <select name="device_type">
-                            <option value="linux">Linux</option>
-                            <option value="h3c">H3C</option>
-                            <option value="huawei">华为</option>
-                            <option value="ruijie">锐捷</option>
-                            <option value="other">其它</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group"><label>备注</label><textarea name="description" rows="2"></textarea></div>
-                <div class="modal-footer" style="justify-content: space-between;">
-                    <button type="button" class="btn btn-secondary" onclick="testSSHFromModal(event)">测试连接</button>
-                    <button type="submit" class="btn btn-primary">保存</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 弹窗：AI 端点 -->
-    <div id="ai-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="ai-modal-title">AI 端点配置</h3>
-                <span class="close" onclick="closeModal('ai-modal')">&times;</span>
-            </div>
-            <form id="ai-form">
-                <input type="hidden" name="id" id="ai-id">
-                <div class="form-group"><label>端点名称</label><input type="text" name="name" required></div>
-                <div class="form-group"><label>Base URL</label><input type="text" name="base_url" required></div>
-                <div class="form-group"><label>API Key</label><input type="password" name="api_key" required></div>
-                <div class="form-group"><label>模型名称</label><input type="text" name="model" required></div>
-                <div class="form-group">
-                    <label>模型能力 (Modalities)</label>
-                    <div class="capabilities-row">
-                        <label class="checkbox-label"><input type="checkbox" name="capabilities" value="text" checked> 文本</label>
-                        <label class="checkbox-label"><input type="checkbox" name="capabilities" value="image"> 图像</label>
-                        <label class="checkbox-label"><input type="checkbox" name="capabilities" value="tools"> 工具使用</label>
-                    </div>
-                </div>
-                <div class="modal-footer" style="justify-content: space-between;">
-                    <button type="button" class="btn btn-secondary" onclick="testAIFromModal(event)">测试连接</button>
-                    <button type="submit" class="btn btn-primary">保存</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 弹窗：角色 -->
-    <div id="role-modal" class="modal">
-        <div class="modal-content" style="width: 600px;">
-            <div class="modal-header">
-                <h3 id="role-modal-title">角色配置</h3>
-                <span class="close" onclick="closeModal('role-modal')">&times;</span>
-            </div>
-            <form id="role-form">
-                <input type="hidden" name="id" id="role-id">
-                <div class="form-group"><label>角色名称</label><input type="text" name="name" required placeholder="例如：高级网络专家"></div>
-                <div class="form-group">
-                    <label>关联模型端点</label>
-                    <select name="ai_endpoint_id" id="role-ai-select">
-                        <option value="">使用系统默认激活端点</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>系统提示词 (System Prompt)</label>
-                    <textarea name="system_prompt" rows="8" required style="font-family: monospace; font-size: 0.9rem;"></textarea>
-                </div>
-                <div class="modal-footer"><button type="submit" class="btn btn-primary">保存角色</button></div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 弹窗：命令分组 -->
-    <div id="command-group-modal" class="modal">
-        <div class="modal-content" style="width: 400px;">
-            <div class="modal-header">
-                <h3 id="command-group-modal-title">命令分类</h3>
-                <span class="close" onclick="closeModal('command-group-modal')">&times;</span>
-            </div>
-            <form id="command-group-form">
-                <input type="hidden" name="id" id="command-group-id">
-                <div class="form-group"><label>分类名称</label><input type="text" name="name" required placeholder="例如：Docker 常用"></div>
-                <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 弹窗：快捷命令 -->
-    <div id="command-modal" class="modal">
-        <div class="modal-content" style="width: 500px;">
-            <div class="modal-header">
-                <h3 id="command-modal-title">快捷命令</h3>
-                <span class="close" onclick="closeModal('command-modal')">&times;</span>
-            </div>
-            <form id="command-form">
-                <input type="hidden" name="id" id="command-id">
-                <input type="hidden" name="group_id" id="command-group-id-hidden">
-                <div class="form-group"><label>命令名称</label><input type="text" name="name" required placeholder="例如：重启 Nginx"></div>
-                <div class="form-group">
-                    <label>指令内容</label>
-                    <textarea name="content" rows="5" required style="font-family: monospace; font-size: 0.9rem;"></textarea>
-                </div>
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="auto_cr" value="1" checked> 自动添加回车符 (CR)
-                    </label>
-                </div>
-                <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 弹窗：SFTP 重命名 -->
-    <div id="sftp-rename-modal" class="modal">
-        <div class="modal-content" style="width: 400px;">
-            <div class="modal-header">
-                <h3>重命名</h3>
-                <span class="close" onclick="closeModal('sftp-rename-modal')">&times;</span>
-            </div>
-            <form id="sftp-rename-form">
-                <input type="hidden" id="sftp-rename-old-path">
-                <div class="form-group"><label>新名称</label><input type="text" id="sftp-new-name" required></div>
-                <div class="modal-footer"><button type="submit" class="btn btn-primary">确定</button></div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 弹窗：SFTP 修改权限 -->
-    <div id="sftp-chmod-modal" class="modal">
-        <div class="modal-content" style="width: 320px;">
-            <div class="modal-header">
-                <h3>修改权限</h3>
-                <span class="close" onclick="closeModal('sftp-chmod-modal')">&times;</span>
-            </div>
-            <form id="sftp-chmod-form">
-                <input type="hidden" id="sftp-chmod-path">
-                <div class="chmod-filename" id="sftp-chmod-filename" style="font-weight: bold; margin-bottom: 15px; font-size: 1.1rem; word-break: break-all;">-</div>
-                
-                <div class="chmod-table">
-                    <div class="chmod-group">
-                        <div class="chmod-group-label">所有者</div>
-                        <div class="chmod-checkboxes">
-                            <label><input type="checkbox" data-role="owner" data-type="read" onchange="updateChmodValue()"> 读取</label>
-                            <label><input type="checkbox" data-role="owner" data-type="write" onchange="updateChmodValue()"> 写入</label>
-                            <label><input type="checkbox" data-role="owner" data-type="execute" onchange="updateChmodValue()"> 执行</label>
-                        </div>
-                    </div>
-                    <div class="chmod-group">
-                        <div class="chmod-group-label">组</div>
-                        <div class="chmod-checkboxes">
-                            <label><input type="checkbox" data-role="group" data-type="read" onchange="updateChmodValue()"> 读取</label>
-                            <label><input type="checkbox" data-role="group" data-type="write" onchange="updateChmodValue()"> 写入</label>
-                            <label><input type="checkbox" data-role="group" data-type="execute" onchange="updateChmodValue()"> 执行</label>
-                        </div>
-                    </div>
-                    <div class="chmod-group">
-                        <div class="chmod-group-label">其他</div>
-                        <div class="chmod-checkboxes">
-                            <label><input type="checkbox" data-role="others" data-type="read" onchange="updateChmodValue()"> 读取</label>
-                            <label><input type="checkbox" data-role="others" data-type="write" onchange="updateChmodValue()"> 写入</label>
-                            <label><input type="checkbox" data-role="others" data-type="execute" onchange="updateChmodValue()"> 执行</label>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-group" style="margin-top: 15px;">
-                    <label>权限值 (Octal)</label>
-                    <input type="text" id="sftp-new-mode" required pattern="[0-7]{3,4}" title="请输入有效的八进制权限值" style="text-align: center; font-family: monospace; font-weight: bold; font-size: 1.1rem;">
-                </div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary">确定</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('sftp-chmod-modal')">取消</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 弹窗：SFTP 新建文件/目录 -->
-    <div id="sftp-create-modal" class="modal">
-        <div class="modal-content" style="width: 400px;">
-            <div class="modal-header">
-                <h3 id="sftp-create-title">新建</h3>
-                <span class="close" onclick="closeModal('sftp-create-modal')">&times;</span>
-            </div>
-            <form id="sftp-create-form">
-                <input type="hidden" id="sftp-create-type">
-                <div class="form-group">
-                    <label id="sftp-create-label">名称</label>
-                    <input type="text" id="sftp-create-name" required placeholder="请输入名称">
-                </div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary">创建</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('sftp-create-modal')">取消</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- SFTP 右键菜单 -->
-    <div id="sftp-context-menu" class="context-menu">
-        <div id="sftp-file-ops">
-            <div class="context-menu-item" onclick="sftpAction('download')"><i class="fas fa-download"></i> 下载</div>
-            <div class="context-menu-item" onclick="sftpAction('edit')"><i class="fas fa-edit"></i> 编辑</div>
-            <div class="context-menu-item" onclick="sftpAction('rename')"><i class="fas fa-file-signature"></i> 重命名</div>
-            <div class="context-menu-item" onclick="sftpAction('chmod')"><i class="fas fa-key"></i> 修改权限</div>
-            <div class="context-menu-separator"></div>
-        </div>
-        <div class="context-menu-item" onclick="sftpAction('newfile')"><i class="fas fa-file-alt"></i> 新建文件</div>
-        <div class="context-menu-item" onclick="sftpAction('newdir')"><i class="fas fa-folder-plus"></i> 新建目录</div>
-        <div class="context-menu-separator"></div>
-        <div id="sftp-delete-op" class="context-menu-item danger" onclick="sftpAction('delete')"><i class="fas fa-trash-alt"></i> 删除</div>
-    </div>
-
-    <!-- 文件编辑器弹窗 -->
-    <div id="editor-modal" class="modal editor-modal">
-        <div class="modal-content editor-modal-content">
-            <div class="editor-toolbar">
-                <div class="toolbar-left">
-                    <button class="btn btn-sm btn-primary" onclick="saveEditorContent()" title="Ctrl+S"><i class="fas fa-save"></i> 保存</button>
-                    <button class="btn btn-sm btn-secondary" onclick="refreshEditorContent()"><i class="fas fa-sync-alt"></i> 刷新</button>
-                    <span id="editor-filename" class="editor-filename">filename.txt</span>
-                    <div class="toolbar-separator"></div>
-                    <button class="btn btn-sm btn-secondary" onclick="toggleEditorSearch('find')"><i class="fas fa-search"></i> 搜索</button>
-                    <button class="btn btn-sm btn-secondary" onclick="toggleEditorSearch('replace')"><i class="fas fa-exchange-alt"></i> 替换</button>
-                    <button class="btn btn-sm btn-secondary" onclick="showJumpLine()"><i class="fas fa-long-arrow-alt-right"></i> 跳转行</button>
-                </div>
-                <div class="toolbar-right">
-                    <div class="editor-settings-item">
-                        <label>主题</label>
-                        <select id="editor-theme-select" onchange="changeEditorTheme(this.value)">
-                            <option value="monokai">Monokai</option>
-                            <option value="chrome">Chrome</option>
-                            <option value="clouds_midnight">Clouds Midnight</option>
-                            <option value="tomorrow_night_bright">Tomorrow Night</option>
-                        </select>
-                    </div>
-                    <div class="editor-settings-item">
-                        <label>字号</label>
-                        <select id="editor-font-size" onchange="changeEditorFontSize(this.value)">
-                            <option value="12px">12px</option>
-                            <option value="14px" selected>14px</option>
-                            <option value="16px">16px</option>
-                            <option value="18px">18px</option>
-                            <option value="20px">20px</option>
-                        </select>
-                    </div>
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-secondary dropdown-toggle" onclick="toggleEditorSettingsMenu()"><i class="fas fa-cog"></i> 设置 <i class="fas fa-caret-down"></i></button>
-                        <div id="editor-settings-menu" class="dropdown-menu">
-                            <label class="dropdown-item"><input type="checkbox" id="edit-wrap" onchange="toggleEditorOption('wrap', this.checked)"> 自动换行</label>
-                            <label class="dropdown-item"><input type="checkbox" id="edit-autocomplete" checked onchange="toggleEditorOption('autocomplete', this.checked)"> 代码自动完成</label>
-                            <label class="dropdown-item"><input type="checkbox" id="edit-snippets" onchange="toggleEditorOption('snippets', this.checked)"> 启用代码段</label>
-                            <label class="dropdown-item"><input type="checkbox" id="edit-invisible" onchange="toggleEditorOption('invisible', this.checked)"> 显示隐形字符</label>
-                            <label class="dropdown-item"><input type="checkbox" id="edit-linenumbers" checked onchange="toggleEditorOption('linenumbers', this.checked)"> 显示行号</label>
-                        </div>
-                    </div>
-                    <button class="btn btn-sm btn-secondary" onclick="showShortcuts()"><i class="fas fa-keyboard"></i> 快捷键</button>
-                    <span class="close" onclick="closeEditorModal()">&times;</span>
-                </div>
-            </div>
-            <div id="ace-editor" class="ace-editor-container"></div>
-            <div class="editor-footer">
-                <div class="footer-left">
-                    <span id="editor-status-path">/path/to/file</span>
-                </div>
-                <div class="footer-right">
-                    <span id="editor-status-info">Ln: 1, Col: 1</span>
-                    <span class="footer-separator">|</span>
-                    <select id="editor-tab-size" onchange="changeEditorTabSize(this.value)">
-                        <option value="2">制表符: 2</option>
-                        <option value="4" selected>制表符: 4</option>
-                        <option value="8">制表符: 8</option>
-                    </select>
-                    <span class="footer-separator">|</span>
-                    <span id="editor-encoding">编码: UTF-8</span>
-                    <span class="footer-separator">|</span>
-                    <span id="editor-mode-display">语言: Text</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 弹窗：编辑器跳转行 -->
-    <div id="editor-jump-modal" class="modal">
-        <div class="modal-content" style="width: 300px;">
-            <div class="modal-header">
-                <h3>跳转到行</h3>
-                <span class="close" onclick="closeModal('editor-jump-modal')">&times;</span>
-            </div>
-            <form id="editor-jump-form">
-                <div class="form-group">
-                    <label>行号</label>
-                    <input type="number" id="editor-jump-line" required min="1" placeholder="输入行号">
-                </div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary">确定</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('editor-jump-modal')">取消</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 弹窗：编辑器快捷键 -->
-    <div id="editor-shortcuts-modal" class="modal">
-        <div class="modal-content" style="width: 400px;">
-            <div class="modal-header">
-                <h3>编辑器快捷键</h3>
-                <span class="close" onclick="closeModal('editor-shortcuts-modal')">&times;</span>
-            </div>
-            <div class="modal-body" style="padding: 20px;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem;">
-                    <div style="color: #888;">保存</div><div style="color: #0078d4; font-weight: bold;">Ctrl + S</div>
-                    <div style="color: #888;">搜索</div><div style="color: #0078d4; font-weight: bold;">Ctrl + F</div>
-                    <div style="color: #888;">替换</div><div style="color: #0078d4; font-weight: bold;">Ctrl + H</div>
-                    <div style="color: #888;">跳转行</div><div style="color: #0078d4; font-weight: bold;">Ctrl + G</div>
-                    <div style="color: #888;">全选</div><div style="color: #0078d4; font-weight: bold;">Ctrl + A</div>
-                    <div style="color: #888;">撤销</div><div style="color: #0078d4; font-weight: bold;">Ctrl + Z</div>
-                    <div style="color: #888;">重做</div><div style="color: #0078d4; font-weight: bold;">Ctrl + Y</div>
-                    <div style="color: #888;">注释/取消</div><div style="color: #0078d4; font-weight: bold;">Ctrl + /</div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeModal('editor-shortcuts-modal')">关闭</button>
-            </div>
-        </div>
-    </div>
+    <!-- 动态注入弹窗组件的占位符 -->
+    <div id="component-placeholder"></div>
 
     <script src="/static/js/xterm.js"></script>
     <script src="/static/js/xterm-addon-fit.js"></script>
@@ -698,6 +322,8 @@
     <script src="/static/lib/ace/ext-language_tools.js"></script>
     <script src="/static/lib/ace/ext-modelist.js"></script>
     <script src="/static/lib/ace/ext-searchbox.js"></script>
-    <script src="/frontend/app.js?v=1.2"></script>
+
+    <!-- 主程序入口 (ES Modules) -->
+    <script type="module" src="/frontend/app.js?v=1.8"></script>
 </body>
 </html>

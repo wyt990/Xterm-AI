@@ -1,0 +1,391 @@
+/* 页面整体布局、侧边栏和 Resizer */
+.app-shell {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
+.sidebar {
+    width: 200px;
+    background-color: #252526;
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.1s ease;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.sidebar.collapsed {
+    width: 60px !important;
+}
+
+.sidebar.collapsed .nav-brand span,
+.sidebar.collapsed .nav-item span {
+    display: none;
+}
+
+.sidebar.collapsed .nav-brand {
+    padding: 15px 5px;
+    justify-content: center;
+}
+
+.sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 12px 10px;
+}
+
+.nav-brand {
+    padding: 20px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #0078d4;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+}
+
+.toggle-btn, .toggle-btn-small {
+    background: transparent;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.toggle-btn:hover, .toggle-btn-small:hover {
+    color: #fff;
+}
+
+#toggle-sidebar {
+    position: absolute;
+    right: 5px;
+}
+
+.nav-menu {
+    list-style: none;
+    padding: 10px 0;
+}
+
+.nav-item {
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    color: #bbb;
+    transition: all 0.2s;
+}
+
+.nav-item:hover {
+    background-color: #2d2d2d;
+    color: #eee;
+}
+
+.nav-item.active {
+    background-color: #37373d;
+    color: #fff;
+    border-left: 3px solid #0078d4;
+}
+
+.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.app-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    height: 100%;
+}
+
+.terminal-section {
+    flex: 1;
+    background: #000;
+    padding: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* 导航项图标修正 */
+.nav-item i {
+    width: 20px;
+    text-align: center;
+}
+
+.view {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.view.active {
+    display: flex;
+}
+
+.view-header {
+    padding: 20px;
+    background-color: #252526;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* 分隔线 Resizer */
+.resizer {
+    width: 4px;
+    background-color: transparent;
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background-color 0.2s;
+    z-index: 10;
+}
+
+.resizer:hover, .resizer.dragging {
+    background-color: #0078d4;
+}
+
+.resizer-h {
+    height: 4px;
+    background-color: transparent;
+    cursor: row-resize;
+    flex-shrink: 0;
+    transition: background-color 0.2s;
+    z-index: 10;
+    position: relative;
+}
+
+.resizer-h:hover, .resizer-h.dragging {
+    background-color: #0078d4;
+}
+
+/* 服务器分组与卡片样式 */
+.server-groups {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.server-group {
+    margin-bottom: 20px;
+}
+
+.group-header {
+    padding: 10px;
+    background: #2d2d2d;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.group-header i {
+    transition: transform 0.2s;
+}
+
+.server-group.collapsed .group-header i {
+    transform: rotate(-90deg);
+}
+
+.server-group.collapsed .group-content {
+    display: none;
+}
+
+.group-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 15px;
+}
+
+.server-card {
+    background: #252526;
+    border: 1px solid #333;
+    padding: 15px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s;
+}
+
+.server-card:hover {
+    border-color: #0078d4;
+    background: #2d2d2d;
+    transform: translateY(-2px);
+}
+
+.server-card-icon {
+    font-size: 1.5rem;
+    color: #0078d4;
+}
+
+.server-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.server-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    /* 左侧加分隔线，视觉上与信息区分开 */
+    border-left: 1px solid #444;
+    padding-left: 10px;
+    margin-left: 4px;
+}
+
+.server-card:hover .server-card-actions {
+    opacity: 1;
+}
+
+.btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: #aaa;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.btn-icon:hover {
+    background: #3a3a3a;
+    color: #fff;
+}
+
+/* 删除按钮悬停专属样式 */
+.btn-icon[title="删除"]:hover {
+    background: rgba(224, 82, 82, 0.15);
+    color: #e05252;
+}
+
+.server-card-info h4 {
+    margin: 0 0 5px 0;
+    font-size: 0.95rem;
+}
+
+.server-card-info p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #888;
+}
+
+/* 历史连接卡片 */
+.history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.history-card {
+    background: #2d2d2d;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #3c3c3c;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.history-card:hover {
+    background: #37373d;
+    border-color: #0078d4;
+}
+
+.history-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.history-time {
+    font-size: 0.75rem;
+    color: #666;
+    text-align: right;
+}
+
+.empty-tip {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    font-style: italic;
+}
+
+/* 角色与模型列表网格 */
+.role-grid, .ai-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.role-card, .ai-card {
+    background: #2d2d2d;
+    border: 1px solid #3c3c3c;
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    transition: all 0.2s;
+}
+
+.role-card:hover, .ai-card:hover {
+    border-color: #0078d4;
+    background: #333;
+}
+
+.role-card-header, .ai-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.role-card-header h3, .ai-card-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #eee;
+}
+
+.role-card-body, .ai-card-body {
+    flex: 1;
+    font-size: 0.9rem;
+    color: #aaa;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.card-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+}

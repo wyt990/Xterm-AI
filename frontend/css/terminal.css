@@ -1,0 +1,266 @@
+/* 终端视图、多标签页、底部面板 */
+.terminal-section {
+    flex: 1;
+    background: #000;
+    padding: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+#terminal-stack {
+    flex: 1;
+    min-height: 100px;
+    padding: 10px;
+    background: #000;
+}
+
+#terminal-container {
+    width: 100%;
+    height: 100%;
+}
+
+/* 标签栏样式 (顶部) */
+.tab-bar {
+    background-color: #252526;
+    display: flex;
+    height: 35px;
+    align-items: center;
+    border-bottom: 1px solid #333;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.tab-bar::-webkit-scrollbar {
+    height: 3px;
+}
+
+.tab {
+    min-width: 120px;
+    max-width: 200px;
+    height: 100%;
+    padding: 0 10px;
+    background-color: #2d2d2d;
+    color: #999;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    cursor: pointer;
+    border-right: 1px solid #1e1e1e;
+    user-select: none;
+    gap: 8px;
+}
+
+.tab span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+
+.tab.active {
+    background-color: #1e1e1e;
+    color: #fff;
+    border-top: 2px solid #0078d4;
+}
+
+.tab:hover {
+    color: #fff;
+}
+
+.tab-close {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    font-size: 10px;
+}
+
+.tab-close:hover {
+    background-color: #e81123;
+    color: white;
+}
+
+.add-tab-btn {
+    padding: 0 12px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    color: #999;
+    cursor: pointer;
+}
+
+.add-tab-btn:hover {
+    background-color: #333;
+    color: #fff;
+}
+
+/* 底部交互面板 */
+.bottom-panel {
+    background-color: #1e1e1e;
+    border-top: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    height: 250px;
+    min-height: 150px;
+    max-height: 60vh;
+    overflow: hidden;
+    transition: height 0.2s ease-out; /* 当折叠时使用过度动画 */
+}
+
+.bottom-panel.collapsed {
+    height: 30px !important;
+    min-height: 0 !important;
+    overflow: hidden;
+}
+
+.bottom-panel-header {
+    background-color: #252526;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    justify-content: space-between;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.panel-tabs {
+    display: flex;
+    height: 100%;
+    align-items: flex-end;
+}
+
+.panel-tab {
+    padding: 0 15px;
+    height: 26px;
+    line-height: 26px;
+    font-size: 12px;
+    color: #888;
+    cursor: pointer;
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+    margin-right: 2px;
+}
+
+.panel-tab.active {
+    background-color: #1e1e1e;
+    color: #eee;
+}
+
+/* 右侧系统信息面板样式 */
+.stats-tabs {
+    display: flex;
+    background: #2d2d2d;
+    border-bottom: 1px solid #3c3c3c;
+    height: 35px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.stats-tab {
+    padding: 0 20px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 13px;
+    color: #888;
+    border-bottom: 2px solid transparent;
+}
+
+.stats-tab.active {
+    color: #0078d4;
+    border-bottom-color: #0078d4;
+    background: rgba(0, 120, 212, 0.05);
+}
+
+.stats-tab-content {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.stats-tab-content.active {
+    display: flex;
+}
+
+.info-container {
+    padding: 15px;
+    overflow-y: auto;
+}
+
+.info-section {
+    margin-bottom: 20px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.gauge-label {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.gauge-bar {
+    height: 8px;
+    background: #333;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.gauge-fill {
+    height: 100%;
+    background: #0078d4;
+    transition: width 0.3s;
+}
+
+.proc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.proc-table th {
+    text-align: left;
+    color: #888;
+    padding: 5px;
+    border-bottom: 1px solid #333;
+}
+
+.proc-table td {
+    padding: 5px;
+    border-bottom: 1px dotted #222;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+.bottom-panel-content {
+    flex: 1;
+    overflow: hidden;
+    display: none;
+}
+
+/* 用父容器提高优先级，确保能覆盖 .sftp-container 等内部 display 规则 */
+#bottom-panel .bottom-panel-content {
+    display: none;
+}
+
+#bottom-panel .bottom-panel-content.active {
+    display: flex;
+    flex-direction: column;
+}

@@ -1,0 +1,53 @@
+<!-- 弹窗：AI 端点配置 -->
+<div id="ai-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="ai-modal-title">AI 端点配置</h3>
+            <span class="close" onclick="closeModal('ai-modal')">&times;</span>
+        </div>
+        <form id="ai-form">
+            <input type="hidden" name="id" id="ai-id">
+            <div class="form-group"><label>端点名称</label><input type="text" name="name" required></div>
+            <div class="form-group"><label>Base URL</label><input type="text" name="base_url" required></div>
+            <div class="form-group"><label>API Key</label><input type="password" name="api_key" required></div>
+            <div class="form-group"><label>模型名称</label><input type="text" name="model" required></div>
+            <div class="form-group">
+                <label>模型能力 (Modalities)</label>
+                <div class="capabilities-row" style="display: flex; gap: 15px;">
+                    <label class="checkbox-label"><input type="checkbox" name="capabilities" value="text" checked> 文本</label>
+                    <label class="checkbox-label"><input type="checkbox" name="capabilities" value="image"> 图像</label>
+                    <label class="checkbox-label"><input type="checkbox" name="capabilities" value="tools"> 工具使用</label>
+                </div>
+            </div>
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button type="button" class="btn btn-secondary" onclick="testAIFromModal(event)">测试连接</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 弹窗：AI 角色配置 -->
+<div id="role-modal" class="modal">
+    <div class="modal-content" style="width: 600px;">
+        <div class="modal-header">
+            <h3 id="role-modal-title">角色配置</h3>
+            <span class="close" onclick="closeModal('role-modal')">&times;</span>
+        </div>
+        <form id="role-form">
+            <input type="hidden" name="id" id="role-id">
+            <div class="form-group"><label>角色名称</label><input type="text" name="name" required placeholder="例如：高级网络专家"></div>
+            <div class="form-group">
+                <label>关联模型端点</label>
+                <select name="ai_endpoint_id" id="role-ai-select">
+                    <option value="">使用系统默认激活端点</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>系统提示词 (System Prompt)</label>
+                <textarea name="system_prompt" rows="8" required style="font-family: monospace; font-size: 0.9rem;"></textarea>
+            </div>
+            <div class="modal-footer"><button type="submit" class="btn btn-primary">保存角色</button></div>
+        </form>
+    </div>
+</div>

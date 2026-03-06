@@ -538,82 +538,141 @@ async def stats_endpoint(websocket: WebSocket, server_id: int):
 
     try:
         while True:
-            # 1. 采集基础信息 (Uptime, Load, IP)
-            # 2. 采集资源占用 (CPU, Mem, Disk)
-            # 3. 采集进程列表 (前10个，按 CPU 排序)
-            # 使用组合指令一次性获取，减少往返
-            cmd = "uptime && free -m && df -h / | tail -1 && ps -eo pmem,pcpu,comm --sort=-pcpu | head -11"
+            # 一次性采集所有指标，使用 ### 分隔符让解析更可靠
+            cmd = (
+                "echo '###HOSTNAME###' && hostname && "
+                "echo '###OS###' && (cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"' || uname -s) && "
+                "echo '###UPTIME###' && uptime && "
+                "echo '###MEM###' && free -m && "
+                "echo '###DISK###' && df -h / | tail -1 && "
+                "echo '###CPU_CORES###' && nproc && "
+                "echo '###PROCS###' && ps -eo pmem,pcpu,comm --sort=-pcpu | head -12"
+            )
             ssh.write(cmd + "\n")
             
-            # 等待并读取输出 (这里使用简单的同步等待，实际可优化)
-            await asyncio.sleep(1)
+            await asyncio.sleep(1.5)
             output = ""
-            for _ in range(5): # 循环读取直到没有新数据
+            for _ in range(8):
                 chunk = ssh.read()
                 if chunk: output += chunk
                 else: break
                 await asyncio.sleep(0.2)
             
-            # 解析输出并结构化为 JSON
             stats = parse_stats_output(output, server_info["host"])
             await websocket.send_json(stats)
             
-            await asyncio.sleep(3) # 每 3 秒更新一次
+            await asyncio.sleep(5)  # 每 5 秒更新一次
     except Exception:
         pass
     finally:
         ssh.close()
 
 def parse_stats_output(output, ip):
-    # 简单的解析逻辑，后续可根据不同发行版增强
     lines = output.splitlines()
-    res = {"ip": ip, "uptime": "-", "load": "-", "cpu": 0, "mem": "0/0", "mem_p": 0, "disk": "0/0", "disk_p": 0, "procs": []}
-    
-    try:
-        # 解析 uptime (第1行左右)
-        for line in lines:
-            if "load average" in line:
-                res["uptime"] = line.split("up")[1].split(",")[0].strip()
-                res["load"] = line.split("load average:")[1].strip()
-                break
-        
-        # 解析内存 (带有 Mem: 的行)
-        for line in lines:
-            if line.startswith("Mem:"):
-                parts = line.split()
-                total, used = int(parts[1]), int(parts[2])
-                res["mem"] = f"{used}M / {total}M"
-                res["mem_p"] = round(used / total * 100, 1)
-                break
-        
-        # 解析磁盘
-        for line in lines:
-            if line.startswith("/") and "%" in line:
-                parts = line.split()
-                res["disk"] = f"{parts[2]} / {parts[1]}"
-                res["disk_p"] = int(parts[4].replace("%", ""))
-                break
+    res = {
+        "hostname": "-", "os": "-", "ip": ip,
+        "uptime": "-", "load": "-", "cpu": 0,
+        "mem": "0 / 0", "mem_p": 0,
+        "disk": "0 / 0", "disk_p": 0,
+        "procs": []
+    }
 
-        # 解析进程 (从 ps 命令开始)
-        start_proc = False
+    try:
+        # 按分隔符分段解析，避免跨段干扰
+        sections = {}
+        current_section = None
         for line in lines:
-            if "%MEM %CPU COMMAND" in line: 
-                start_proc = True; continue
-            if start_proc and line.strip():
-                parts = line.split(None, 2)
-                if len(parts) >= 3:
-                    res["procs"].append({
-                        "mem": parts[0] + "%",
-                        "cpu": parts[1] + "%",
-                        "cmd": parts[2],
-                        "mem_raw": float(parts[0]),
-                        "cpu_raw": float(parts[1])
-                    })
-        
-        # 估算 CPU (简单使用 load / cores，这里由于没拿 cores，先设为固定或从 load 提取)
-        if res["load"] != "-":
-            try: res["cpu"] = min(float(res["load"].split(",")[0]) * 100, 100)
-            except: pass
+            stripped = line.strip()
+            if stripped.startswith('###') and stripped.endswith('###'):
+                current_section = stripped[3:-3]
+                sections[current_section] = []
+            elif current_section:
+                sections[current_section].append(line)
+
+        # 主机名
+        if 'HOSTNAME' in sections:
+            for l in sections['HOSTNAME']:
+                l = l.strip()
+                if l and not l.startswith('#'):
+                    res['hostname'] = l
+                    break
+
+        # 操作系统
+        if 'OS' in sections:
+            for l in sections['OS']:
+                l = l.strip()
+                if l and not l.startswith('#'):
+                    res['os'] = l
+                    break
+
+        # Uptime / Load
+        if 'UPTIME' in sections:
+            for l in sections['UPTIME']:
+                if 'load average' in l:
+                    try:
+                        res['uptime'] = l.split('up')[1].split(',')[0].strip()
+                        res['load'] = l.split('load average:')[1].strip()
+                    except Exception:
+                        pass
+                    break
+
+        # 内存
+        if 'MEM' in sections:
+            for l in sections['MEM']:
+                if l.startswith('Mem:'):
+                    parts = l.split()
+                    if len(parts) >= 3:
+                        total, used = int(parts[1]), int(parts[2])
+                        res['mem'] = f"{used}M / {total}M"
+                        res['mem_p'] = round(used / total * 100, 1) if total else 0
+                    break
+
+        # 磁盘
+        if 'DISK' in sections:
+            for l in sections['DISK']:
+                if '/' in l and '%' in l:
+                    parts = l.split()
+                    if len(parts) >= 5:
+                        res['disk'] = f"{parts[2]} / {parts[1]}"
+                        try:
+                            res['disk_p'] = int(parts[4].replace('%', ''))
+                        except Exception:
+                            pass
+                    break
+
+        # CPU 核心数 & 负载换算
+        cores = 1
+        if 'CPU_CORES' in sections:
+            for l in sections['CPU_CORES']:
+                l = l.strip()
+                if l.isdigit():
+                    cores = max(1, int(l))
+                    break
+        if res['load'] != '-':
+            try:
+                load1 = float(res['load'].split(',')[0])
+                res['cpu'] = round(min(load1 / cores * 100, 100), 1)
+            except Exception:
+                pass
+
+        # 进程列表
+        if 'PROCS' in sections:
+            started = False
+            for l in sections['PROCS']:
+                if '%MEM' in l and '%CPU' in l:
+                    started = True
+                    continue
+                if started and l.strip():
+                    parts = l.split(None, 2)
+                    if len(parts) >= 3:
+                        try:
+                            res['procs'].append({
+                                "mem": parts[0] + "%",
+                                "cpu": parts[1] + "%",
+                                "cmd": parts[2].strip(),
+                            })
+                        except Exception:
+                            pass
 
     except Exception:
         pass
