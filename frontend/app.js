@@ -347,25 +347,74 @@ window.addEventListener('serversChanged', () => {
 });
 
 // --- 历史连接 ---
+function getDeviceIcon(deviceType) {
+    switch ((deviceType || '').toLowerCase()) {
+        case 'windows': return 'fa-brands fa-windows';
+        case 'network': return 'fas fa-network-wired';
+        default:        return 'fas fa-server';
+    }
+}
+
+function getDeviceIconClass(deviceType) {
+    switch ((deviceType || '').toLowerCase()) {
+        case 'windows': return 'windows';
+        case 'network': return 'network';
+        case 'linux':   return 'linux';
+        default:        return 'linux';
+    }
+}
+
+function formatRelativeTime(ts) {
+    const diff = Date.now() - ts;
+    const min = Math.floor(diff / 60000);
+    if (min < 1)  return '刚刚';
+    if (min < 60) return `${min} 分钟前`;
+    const h = Math.floor(min / 60);
+    if (h < 24)   return `${h} 小时前`;
+    const d = Math.floor(h / 24);
+    if (d < 30)   return `${d} 天前`;
+    return new Date(ts).toLocaleDateString();
+}
+
 function loadConnectionHistory() {
     const history = storage.get('connection_history', []);
     const container = document.getElementById('connection-history-list');
     if (!container) return;
-    if (history.length === 0) { container.innerHTML = '<div class="empty-tip">暂无最近连接记录</div>'; return; }
+    if (history.length === 0) {
+        container.innerHTML = '<div class="empty-tip"><i class="fas fa-plug" style="display:block;font-size:2rem;margin-bottom:12px;color:#333;"></i>暂无最近连接记录</div>';
+        return;
+    }
     
     container.innerHTML = '';
     history.forEach(item => {
         const card = document.createElement('div');
         card.className = 'history-card';
+        const iconCls  = getDeviceIconClass(item.device_type);
+        const iconName = getDeviceIcon(item.device_type);
+        const groupHtml = item.group_name && item.group_name !== 'default'
+            ? `<div class="history-card-group"><i class="fas fa-folder"></i>${item.group_name.replace(/\//g, ' › ')}</div>`
+            : '';
         card.innerHTML = `
-            <div class="history-info"><strong>${item.name}</strong><span>${item.host}</span></div>
-            <div class="history-time">${new Date(item.time).toLocaleString()}</div>
+            <div class="history-card-header">
+                <div class="history-card-icon ${iconCls}"><i class="${iconName}"></i></div>
+                <div class="history-card-name" title="${item.name}">${item.name}</div>
+            </div>
+            <div class="history-card-host">${item.host}${item.port && item.port !== 22 ? ':' + item.port : ''}</div>
+            ${groupHtml}
+            <div class="history-card-footer">
+                <span class="history-time" title="${new Date(item.time).toLocaleString()}">${formatRelativeTime(item.time)}</span>
+            </div>
         `;
-        // 修复：直接绑定 item 对象，避免根据 host 查找导致的闭包/匹配错误
         card.onclick = () => connectToServer(item);
         container.appendChild(card);
     });
 }
+
+window.clearConnectionHistory = function() {
+    if (!confirm('确定要清空所有最近连接记录吗？')) return;
+    storage.set('connection_history', []);
+    loadConnectionHistory();
+};
 
 // --- 系统设置辅助 ---
 async function loadSystemSettings() {

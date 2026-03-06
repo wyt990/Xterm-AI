@@ -296,46 +296,155 @@
     color: #888;
 }
 
-/* 历史连接卡片 */
-.history-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 20px;
+/* 最近连接页面 */
+.quick-connect-container {
+    padding: 28px 32px;
+    flex: 1;
+    overflow-y: auto;
+    box-sizing: border-box;
+    min-height: 0;
 }
 
-.history-card {
-    background: #2d2d2d;
-    padding: 15px;
-    border-radius: 8px;
+.quick-connect-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.quick-connect-header h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #ccc;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.quick-connect-header h2 i {
+    color: #0078d4;
+    font-size: 1rem;
+}
+
+.btn-clear-history {
+    background: none;
     border: 1px solid #3c3c3c;
+    color: #666;
+    padding: 4px 10px;
+    border-radius: 4px;
     cursor: pointer;
+    font-size: 12px;
     transition: all 0.2s;
 }
 
-.history-card:hover {
-    background: #37373d;
-    border-color: #0078d4;
+.btn-clear-history:hover {
+    border-color: #e05252;
+    color: #e05252;
+    background: rgba(224, 82, 82, 0.08);
 }
 
-.history-info {
+/* 历史连接卡片 */
+.history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.history-card {
+    background: #1e1e1e;
+    padding: 14px 16px;
+    border-radius: 8px;
+    border: 1px solid #2d2d2d;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.1s;
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    margin-bottom: 10px;
+    gap: 6px;
+    min-width: 0;
+}
+
+.history-card:hover {
+    background: #252526;
+    border-color: #0078d4;
+    transform: translateY(-1px);
+}
+
+.history-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.history-card-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.history-card-icon.linux   { background: rgba(0, 120, 212, 0.15); color: #4fc3f7; }
+.history-card-icon.windows { background: rgba(0, 188, 135, 0.15); color: #4caf88; }
+.history-card-icon.network { background: rgba(255, 167, 38, 0.15); color: #ffa726; }
+.history-card-icon.default { background: rgba(150, 150, 150, 0.15); color: #aaa; }
+
+.history-card-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #ddd;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.history-card-host {
+    font-size: 0.78rem;
+    color: #888;
+    font-family: monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-card-group {
+    font-size: 0.72rem;
+    color: #555;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.history-card-group i {
+    font-size: 0.68rem;
+}
+
+.history-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: 2px;
 }
 
 .history-time {
-    font-size: 0.75rem;
-    color: #666;
-    text-align: right;
+    font-size: 0.7rem;
+    color: #4a4a4a;
 }
 
 .empty-tip {
     grid-column: 1 / -1;
     text-align: center;
-    padding: 40px;
-    color: #666;
-    font-style: italic;
+    padding: 60px 40px;
+    color: #555;
+    font-size: 0.9rem;
 }
 
 /* 角色与模型列表网格 */
