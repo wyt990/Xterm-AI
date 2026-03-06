@@ -10,14 +10,64 @@ let isAiProcessing = false;
 const aiMessages = document.getElementById('ai-messages');
 const aiInput = document.getElementById('ai-input');
 const sendBtn = document.getElementById('send-btn');
+const roleSelect = document.getElementById('ai-role-select');
+
+// 所有可用角色列表（{id, name, is_active}）
+let allRoles = [];
+// 系统默认激活角色 ID（全局默认）
+let defaultRoleId = null;
+
+// 加载角色列表并填充选择器
+async function loadRoles() {
+    try {
+        const roles = await api.getRoles();
+        allRoles = roles;
+        roleSelect.innerHTML = '';
+        roles.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.textContent = r.name;
+            if (r.is_active) {
+                defaultRoleId = r.id;
+                opt.selected = true;
+            }
+            roleSelect.appendChild(opt);
+        });
+        // 若无 is_active，fallback 到第一项
+        if (!defaultRoleId && roles.length > 0) {
+            defaultRoleId = roles[0].id;
+            roleSelect.value = defaultRoleId;
+        }
+    } catch (e) {
+        console.error('加载角色列表失败:', e);
+    }
+}
+
+// 获取当前激活 tab 的角色 ID
+function getCurrentRoleId() {
+    const tab = activeTabId ? window.getTab(activeTabId) : null;
+    if (tab && tab.roleId) return tab.roleId;
+    return defaultRoleId;
+}
 
 export function initAIModule() {
+    // 加载角色列表
+    loadRoles();
+
     // 绑定发送按钮
     sendBtn.onclick = handleAISend;
     aiInput.onkeydown = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleAISend();
+        }
+    };
+
+    // 角色切换：更新当前 tab 的 roleId
+    roleSelect.onchange = () => {
+        const tab = activeTabId ? window.getTab(activeTabId) : null;
+        if (tab) {
+            tab.roleId = parseInt(roleSelect.value);
         }
     };
 
@@ -33,9 +83,12 @@ export function initAIModule() {
         aiMessages.innerHTML = '<div class="message system" style="text-align:center;color:#666;padding:20px;">暂无活跃连接，请先连接服务器</div>';
     });
 
-    // 初始化时监听标签切换，刷新消息列表
+    // 标签切换：刷新消息列表 + 同步角色选择器
     window.addEventListener('tabSwitched', (e) => {
         const tab = e.detail.tab;
+        // 同步角色选择器：该 tab 有绑定角色则显示，否则显示默认激活角色
+        roleSelect.value = tab.roleId || defaultRoleId || (allRoles[0] && allRoles[0].id) || '';
+        // 重渲染消息历史
         aiMessages.innerHTML = '';
         tab.chatHistory.forEach(msg => {
             const div = createMessageDiv(msg.role);
@@ -47,6 +100,9 @@ export function initAIModule() {
         });
         aiMessages.scrollTop = aiMessages.scrollHeight;
     });
+
+    // 角色在"AI 角色"页面被修改后，重新加载角色列表
+    window.addEventListener('rolesChanged', () => loadRoles());
 
     // 暴露清空对话给全局
     window.clearChat = clearChat;
@@ -80,7 +136,9 @@ function openAISocket(messages, tab) {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const mode = document.getElementById('ai-mode-select').value;
-    const wsUrl = `${protocol}//${window.location.host}/ws/ai?mode=${mode}`;
+    const roleId = getCurrentRoleId();
+    const roleParam = roleId ? `&role_id=${roleId}` : '';
+    const wsUrl = `${protocol}//${window.location.host}/ws/ai?mode=${mode}${roleParam}`;
 
     aiSocket = new WebSocket(wsUrl);
     const currentAiMsgDiv = createMessageDiv('ai');
@@ -308,8 +366,8 @@ function executeAICommand(command, tab) {
         tab.captureTimer = null;
     }
 
-    // 发送命令到终端（带回车换行）
-    tab.socket.send(JSON.stringify({ type: 'data', data: command.trim() + '\n' }));
+    // 发送命令到终端（\r 对应 xterm.js 真实 Enter 键，Linux PTY 和 Windows SSH 均可识别）
+    tab.socket.send(JSON.stringify({ type: 'data', data: command.trim() + '\r' }));
     notify('命令已发送，等待执行结果...');
 }
 

@@ -39,12 +39,49 @@
 }
 
 .ai-header {
-    padding: 15px;
+    padding: 8px 12px;
     background: #2d2d2d;
     border-bottom: 1px solid #3c3c3c;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.ai-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.ai-header-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #ccc;
+    white-space: nowrap;
+}
+
+.ai-role-select {
+    flex: 1;
+    min-width: 0;
+    background: #1e1e1e;
+    color: #ccc;
+    border: 1px solid #3c3c3c;
+    border-radius: 4px;
+    font-size: 12px;
+    padding: 4px 6px;
+    cursor: pointer;
+    outline: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: border-color 0.15s;
+}
+
+.ai-role-select:focus,
+.ai-role-select:hover {
+    border-color: #0078d4;
 }
 
 .ai-messages {
@@ -84,35 +121,89 @@
 }
 
 .ai-input-area {
-    padding: 15px;
+    padding: 10px 12px 12px;
     background: #2d2d2d;
     border-top: 1px solid #3c3c3c;
     display: flex;
-    gap: 10px;
-    align-items: flex-end;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
 }
 
 .ai-input-area textarea {
-    flex: 1;
+    width: 100%;
     background: #1e1e1e;
-    border: 1px solid #444;
-    border-radius: 4px;
+    border: 1px solid #3c3c3c;
+    border-radius: 6px;
     color: #eee;
-    padding: 8px 12px;
+    padding: 8px 10px;
     resize: none;
-    height: 60px;
+    height: 64px;
     font-size: 13px;
     line-height: 1.5;
     outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
 }
 
 .ai-input-area textarea:focus {
     border-color: #0078d4;
 }
 
+.ai-input-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.ai-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ai-mode-select {
+    background: #1e1e1e;
+    color: #ccc;
+    border: 1px solid #3c3c3c;
+    border-radius: 4px;
+    font-size: 12px;
+    padding: 4px 8px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.ai-mode-select:focus,
+.ai-mode-select:hover {
+    border-color: #555;
+}
+
+.ai-toolbar-btn {
+    width: 28px;
+    height: 28px;
+    background: none;
+    border: 1px solid #3c3c3c;
+    border-radius: 4px;
+    color: #666;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: all 0.15s;
+}
+
+.ai-toolbar-btn:hover {
+    border-color: #e05252;
+    color: #e05252;
+    background: rgba(224, 82, 82, 0.08);
+}
+
 #send-btn {
-    width: 36px;
-    height: 36px;
+    height: 30px;
+    padding: 0 14px;
     background: #0078d4;
     color: white;
     border: none;
@@ -120,10 +211,11 @@
     cursor: pointer;
     display: flex;
     align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.15s;
     flex-shrink: 0;
-    margin-bottom: 2px;
 }
 
 #send-btn:hover {

@@ -162,26 +162,33 @@
                         
                         <div id="ai-chat-view" class="stats-tab-content active">
                             <div class="ai-header">
-                                <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="ai-header-left">
                                     <div class="status-dot" id="ai-status"></div>
-                                    <span style="font-size: 0.9rem; font-weight: bold;">智能运维助手</span>
+                                    <span class="ai-header-title">智能运维助手</span>
                                 </div>
-                                <div style="display: flex; gap: 8px;">
-                                    <select id="ai-mode-select" style="background: #3c3c3c; color: #eee; border: 1px solid #555; font-size: 12px; padding: 2px 5px; border-radius: 4px;">
-                                        <option value="agent">Agent 模式</option>
-                                        <option value="ask">Ask 模式</option>
-                                    </select>
-                                    <button id="clear-chat-btn" class="btn-icon" title="清空对话" onclick="clearChat()"><i class="fas fa-trash-alt"></i></button>
-                                </div>
+                                <select id="ai-role-select" class="ai-role-select" title="切换角色（仅影响本会话）">
+                                    <!-- 由 JS 动态填充 -->
+                                </select>
                             </div>
                             <div class="ai-messages" id="ai-messages">
                                 <!-- 消息内容 -->
                             </div>
                             <div class="ai-input-area">
-                                <textarea id="ai-input" placeholder="输入运维指令或问题..."></textarea>
-                                <button id="send-btn" title="发送 (Enter)">
-                                    <i class="fas fa-paper-plane"></i>
-                                </button>
+                                <textarea id="ai-input" placeholder="向AI助手提问... (Enter 发送, Shift+Enter 换行)"></textarea>
+                                <div class="ai-input-toolbar">
+                                    <div class="ai-toolbar-left">
+                                        <select id="ai-mode-select" class="ai-mode-select" title="选择对话模式">
+                                            <option value="agent">Agent</option>
+                                            <option value="ask">Ask</option>
+                                        </select>
+                                        <button id="clear-chat-btn" class="ai-toolbar-btn" title="清空本会话对话" onclick="clearChat()">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </div>
+                                    <button id="send-btn" title="发送 (Enter)">
+                                        <i class="fas fa-paper-plane"></i><span>发送</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 

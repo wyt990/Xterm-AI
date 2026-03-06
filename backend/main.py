@@ -433,11 +433,15 @@ async def ssh_endpoint(websocket: WebSocket, server_id: int):
 
 # --- WebSocket AI 连接 ---
 @app.websocket("/ws/ai")
-async def ai_endpoint(websocket: WebSocket):
+async def ai_endpoint(websocket: WebSocket, role_id: Optional[int] = None):
     await websocket.accept()
     
-    # 1. 获取激活的角色
-    role_info = db.get_active_role()
+    # 1. 获取角色：优先使用前端传入的 role_id，否则使用全局激活角色
+    role_info = None
+    if role_id:
+        role_info = db.get_role_by_id(role_id)
+    if not role_info:
+        role_info = db.get_active_role()
     if not role_info:
         # 兜底：获取第一个角色或使用内置提示词
         role_info = {"system_prompt": "You are a helpful assistant.", "ai_endpoint_id": None}

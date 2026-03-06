@@ -25,6 +25,7 @@ export function createTab(serverConfig) {
         socket: null,
         fitAddon: null,
         chatHistory: [],
+        roleId: null,          // 该会话选用的角色 ID，null 表示使用系统激活角色
         sftpCurrentPath: '',   // 空字符串 → 后端自动解析为用户家目录
         isCapturing: false,    // AI 指令执行后捕获终端输出的标志
         captureBuffer: '',     // 捕获的原始终端输出
