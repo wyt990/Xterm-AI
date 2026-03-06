@@ -1,11 +1,37 @@
 import sqlite3
 import os
 import json
+from cryptography.fernet import Fernet
+from dotenv import load_dotenv
+
+# 加载 .env 环境变量
+load_dotenv()
 
 class Database:
     def __init__(self, db_path):
         self.db_path = db_path
+        # 初始化加密器
+        encryption_key = os.getenv("ENCRYPTION_KEY")
+        if not encryption_key:
+            # 这里的 fallback 仅用于防止程序崩溃，实际生产应确保配置了秘钥
+            print("警告: 未配置 ENCRYPTION_KEY，将使用临时秘钥。")
+            self.fernet = Fernet(Fernet.generate_key())
+        else:
+            self.fernet = Fernet(encryption_key.encode())
+            
         self._init_db()
+
+    def _encrypt(self, text):
+        if not text: return None
+        return self.fernet.encrypt(text.encode()).decode()
+
+    def _decrypt(self, encrypted_text):
+        if not encrypted_text: return None
+        try:
+            return self.fernet.decrypt(encrypted_text.encode()).decode()
+        except Exception:
+            # 如果解密失败（可能是旧的明文数据），原样返回，由迁移脚本处理
+            return encrypted_text
 
     def _get_connection(self):
         return sqlite3.connect(self.db_path)
@@ -139,7 +165,12 @@ class Database:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM servers ORDER BY group_name, name')
-            return [dict(row) for row in cursor.fetchall()]
+            rows = [dict(row) for row in cursor.fetchall()]
+            # 解密关键字段
+            for r in rows:
+                r['password'] = self._decrypt(r.get('password'))
+                r['private_key'] = self._decrypt(r.get('private_key'))
+            return rows
 
     def get_server_by_id(self, server_id):
         with self._get_connection() as conn:
@@ -147,28 +178,37 @@ class Database:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM servers WHERE id = ?', (server_id,))
             row = cursor.fetchone()
-            return dict(row) if row else None
+            if row:
+                res = dict(row)
+                res['password'] = self._decrypt(res.get('password'))
+                res['private_key'] = self._decrypt(res.get('private_key'))
+                return res
+            return None
 
     def add_server(self, data):
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            encrypted_password = self._encrypt(data.get('password'))
+            encrypted_private_key = self._encrypt(data.get('private_key'))
             cursor.execute('''
                 INSERT INTO servers (name, host, port, username, password, private_key, group_name, device_type, description)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (data['name'], data['host'], data.get('port', 22), data['username'], data.get('password'), 
-                  data.get('private_key'), data.get('group_name', 'default'), data.get('device_type', 'linux'), data.get('description')))
+            ''', (data['name'], data['host'], data.get('port', 22), data['username'], encrypted_password, 
+                  encrypted_private_key, data.get('group_name', 'default'), data.get('device_type', 'linux'), data.get('description')))
             conn.commit()
             return cursor.lastrowid
 
     def update_server(self, server_id, data):
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            encrypted_password = self._encrypt(data.get('password'))
+            encrypted_private_key = self._encrypt(data.get('private_key'))
             cursor.execute('''
                 UPDATE servers 
                 SET name=?, host=?, port=?, username=?, password=?, private_key=?, group_name=?, device_type=?, description=?
                 WHERE id=?
-            ''', (data['name'], data['host'], data['port'], data['username'], data.get('password'), 
-                  data.get('private_key'), data['group_name'], data['device_type'], data.get('description'), server_id))
+            ''', (data['name'], data['host'], data['port'], data['username'], encrypted_password, 
+                  encrypted_private_key, data['group_name'], data['device_type'], data.get('description'), server_id))
             conn.commit()
 
     def delete_server(self, server_id):

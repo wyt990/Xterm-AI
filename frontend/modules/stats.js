@@ -4,12 +4,12 @@
 import { activeTabId } from './terminal.js';
 
 let statsSocket = null;
-let currentServerId = null;
+let currentTabId = null;
 
 export function initStatsModule() {
     window.addEventListener('tabSwitched', (e) => {
         const tab = e.detail.tab;
-        if (tab.config.id !== currentServerId) {
+        if (tab.id !== currentTabId) {
             startStatsMonitoring(tab);
         }
     });
@@ -20,22 +20,29 @@ export function initStatsModule() {
             statsSocket.close();
             statsSocket = null;
         }
-        currentServerId = null;
+        currentTabId = null;
         clearStatsUI();
     });
 }
 
 function startStatsMonitoring(tab) {
-    if (statsSocket) statsSocket.close();
+    if (statsSocket) {
+        statsSocket.close();
+        statsSocket = null;
+    }
     
     if (!tab.config || !tab.config.id) return;
-    currentServerId = tab.config.id;
+    currentTabId = tab.id;
     
     // 延迟发起，给 SSH 连接留出带宽
     setTimeout(() => {
+        // 如果在延迟期间切换了标签，则不再发起
+        if (currentTabId !== tab.id) return;
+
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // 后端路由是 /ws/stats/{server_id}，使用 server_id 作为路径参数
-        const wsUrl = `${protocol}//${window.location.host}/ws/stats/${tab.config.id}`;
+        const token = localStorage.getItem('xterm_token');
+        // 后端路由是 /ws/stats/{server_id}，使用 server_id 作为路径参数，并带上鉴权 token
+        const wsUrl = `${protocol}//${window.location.host}/ws/stats/${tab.config.id}${token ? '?token=' + token : ''}`;
 
         statsSocket = new WebSocket(wsUrl);
 
@@ -43,6 +50,7 @@ function startStatsMonitoring(tab) {
             try {
                 const stats = JSON.parse(event.data);
                 tab.stats = stats;
+                // 检查是否仍是活跃标签（直接读取 terminal.js 导出的 activeTabId，ESM 导出是实时绑定的）
                 if (activeTabId === tab.id) {
                     updateStatsUI(stats);
                 }

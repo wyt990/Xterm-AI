@@ -137,8 +137,10 @@ function openAISocket(messages, tab) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const mode = document.getElementById('ai-mode-select').value;
     const roleId = getCurrentRoleId();
+    const token = localStorage.getItem('xterm_token');
     const roleParam = roleId ? `&role_id=${roleId}` : '';
-    const wsUrl = `${protocol}//${window.location.host}/ws/ai?mode=${mode}${roleParam}`;
+    const tokenParam = token ? `&token=${token}` : '';
+    const wsUrl = `${protocol}//${window.location.host}/ws/ai?mode=${mode}${roleParam}${tokenParam}`;
 
     aiSocket = new WebSocket(wsUrl);
     const currentAiMsgDiv = createMessageDiv('ai');

@@ -153,8 +153,9 @@ function connectTerminal(tab) {
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // 后端路由是 /ws/ssh/{server_id}，使用 server_id 作为路径参数
-        const wsUrl = `${protocol}//${window.location.host}/ws/ssh/${tab.config.id}`;
+        const token = localStorage.getItem('xterm_token');
+        // 后端路由是 /ws/ssh/{server_id}，使用 server_id 作为路径参数，并带上鉴权 token
+        const wsUrl = `${protocol}//${window.location.host}/ws/ssh/${tab.config.id}${token ? '?token=' + token : ''}`;
 
         console.log(`🔌 正在发起 SSH WebSocket 连接: ${tab.config.host} (${wsUrl})`);
         const socket = new WebSocket(wsUrl);

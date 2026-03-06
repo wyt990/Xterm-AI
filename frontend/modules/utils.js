@@ -5,6 +5,7 @@
 // 1. 动态加载 HTML 组件
 export async function loadComponents() {
     const components = [
+        'auth_modals.html',
         'server_modals.html',
         'ai_modals.html',
         'command_modals.html',

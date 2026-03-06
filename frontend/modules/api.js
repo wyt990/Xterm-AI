@@ -3,14 +3,27 @@
  */
 
 async function request(url, options = {}) {
+    const token = localStorage.getItem('xterm_token');
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers,
+    };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
     try {
         const response = await fetch(url, {
             ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers,
-            }
+            headers
         });
+        
+        if (response.status === 401 && url !== '/api/login') {
+            // Token 失效，跳转到登录或显示登录弹窗
+            window.dispatchEvent(new CustomEvent('authError'));
+            throw new Error('未登录或登录过期');
+        }
+
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || '请求失败');
         return data;
@@ -21,6 +34,9 @@ async function request(url, options = {}) {
 }
 
 export const api = {
+    // 登录
+    login: (password) => request('/api/login', { method: 'POST', body: JSON.stringify({ password }) }),
+    
     // 服务器管理
     getServers: () => request('/api/servers'),
     addServer: (data) => request('/api/servers', { method: 'POST', body: JSON.stringify(data) }),

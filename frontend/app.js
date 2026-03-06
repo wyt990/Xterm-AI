@@ -22,7 +22,54 @@ async function init() {
     // 1. 先加载所有 HTML 组件 (弹窗等)
     await loadComponents();
     
-    // 2. 确保 DOM 就绪后再初始化模块
+    // --- 鉴权拦截逻辑 ---
+    const token = localStorage.getItem('xterm_token');
+    if (!token) {
+        showModal('login-modal');
+        // 未登录时不再继续执行后续的数据加载
+        return;
+    }
+
+    // 绑定登录表单 (这里保留，以防从 authError 触发)
+    setupLoginForm();
+
+    // 监听全局鉴权错误
+    window.addEventListener('authError', () => {
+        localStorage.removeItem('xterm_token');
+        showModal('login-modal');
+    });
+    // ------------------
+
+    // 2. 只有有 Token 时才初始化模块并加载数据
+    await startApp();
+}
+
+function setupLoginForm() {
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const pwd = document.getElementById('login-password').value;
+            const errEl = document.getElementById('login-error');
+            try {
+                const res = await api.login(pwd);
+                localStorage.setItem('xterm_token', res.access_token);
+                closeModal('login-modal');
+                notify('登录成功', 'success');
+                // 登录成功后启动应用
+                await startApp();
+            } catch (err) {
+                if (errEl) errEl.style.display = 'block';
+            }
+        };
+    }
+}
+
+async function startApp() {
+    // 防止重复初始化
+    if (window.isAppStarted) return;
+    window.isAppStarted = true;
+
     terminal.initTerminalModule();
     ai.initAIModule();
     sftp.initSFTPModule();
@@ -41,7 +88,7 @@ async function init() {
     loadServers();
     loadConnectionHistory();
     loadCommandGroups();
-    
+
     // 监听命令变更
     window.addEventListener('commandsChanged', () => loadCommandGroups());
     

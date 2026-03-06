@@ -1,6 +1,7 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Depends, status, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Optional
 import os
@@ -8,6 +9,8 @@ import asyncio
 import json
 import glob
 import io
+import jwt
+from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 from ssh_handler import SSHHandler
@@ -18,15 +21,64 @@ from logger import app_logger
 # 加载配置
 load_dotenv(dotenv_path="../.env")
 
+JWT_SECRET = os.getenv("JWT_SECRET", "xterm_secret_key_999")
+JWT_ALGORITHM = "HS256"
+APP_PASSWORD = os.getenv("APP_PASSWORD", "admin")
+
 app = FastAPI()
+security = HTTPBearer()
+
+# --- 鉴权工具 ---
+def create_access_token():
+    expire = datetime.utcnow() + timedelta(days=7)
+    to_encode = {"exp": expire, "sub": "xterm_admin"}
+    return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效或过期的 Token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+# WebSocket 鉴权 (通过 query 参数 token)
+async def verify_ws_token(websocket: WebSocket):
+    token = websocket.query_params.get("token")
+    if not token:
+        return False
+    try:
+        jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return True
+    except Exception:
+        return False
+
+# --- 登录 API ---
+class LoginModel(BaseModel):
+    password: str
+
+@app.post("/api/login")
+async def login(data: LoginModel):
+    if data.password == APP_PASSWORD:
+        token = create_access_token()
+        return {"access_token": token, "token_type": "bearer"}
+    raise HTTPException(status_code=401, detail="密码错误")
 
 # 数据库实例
 db_path = os.getenv("DB_PATH", "../config/xterm.db")
 db = Database(db_path)
 
-# 挂载静态文件
+# 挂载静态文件 (这些不需要鉴权，前端页面本身可以加载)
 app.mount("/frontend", StaticFiles(directory="../frontend"), name="frontend")
 app.mount("/static", StaticFiles(directory="../static"), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+async def get_index():
+    with open("../frontend/index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
 # 数据模型
 class ServerModel(BaseModel):
@@ -114,33 +166,33 @@ async def get():
         return HTMLResponse(content=f.read())
 
 # --- 服务器管理 API ---
-@app.get("/api/servers")
+@app.get("/api/servers", dependencies=[Depends(verify_token)])
 async def list_servers():
     return db.get_all_servers()
 
-@app.post("/api/servers")
+@app.post("/api/servers", dependencies=[Depends(verify_token)])
 async def add_server(server: ServerModel):
     server_id = db.add_server(server.model_dump())
     return {"id": server_id, "status": "success"}
 
-@app.get("/api/servers/{server_id}")
+@app.get("/api/servers/{server_id}", dependencies=[Depends(verify_token)])
 async def get_server(server_id: int):
     server = db.get_server_by_id(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
     return server
 
-@app.put("/api/servers/{server_id}")
+@app.put("/api/servers/{server_id}", dependencies=[Depends(verify_token)])
 async def update_server(server_id: int, server: ServerModel):
     db.update_server(server_id, server.model_dump())
     return {"status": "success"}
 
-@app.delete("/api/servers/{server_id}")
+@app.delete("/api/servers/{server_id}", dependencies=[Depends(verify_token)])
 async def delete_server(server_id: int):
     db.delete_server(server_id)
     return {"status": "success"}
 
-@app.post("/api/servers/test")
+@app.post("/api/servers/test", dependencies=[Depends(verify_token)])
 async def test_server_connection(server: ServerTestModel):
     ssh = SSHHandler(
         host=server.host,
@@ -156,7 +208,7 @@ async def test_server_connection(server: ServerTestModel):
         return {"success": False, "message": "连接失败，请检查主机、端口、账号或密码是否正确"}
 
 # --- AI 配置管理 API ---
-@app.get("/api/ai_endpoints")
+@app.get("/api/ai_endpoints", dependencies=[Depends(verify_token)])
 async def list_ai():
     endpoints = db.get_all_ai_endpoints()
     # 反序列化 capabilities
@@ -168,7 +220,7 @@ async def list_ai():
                 ep['capabilities'] = ["text"]
     return endpoints
 
-@app.get("/api/ai_endpoints/{ai_id}")
+@app.get("/api/ai_endpoints/{ai_id}", dependencies=[Depends(verify_token)])
 async def get_ai_endpoint(ai_id: int):
     ai = db.get_ai_endpoint_by_id(ai_id)
     if not ai:
@@ -177,71 +229,71 @@ async def get_ai_endpoint(ai_id: int):
         ai['capabilities'] = json.loads(ai['capabilities'])
     return ai
 
-@app.post("/api/ai_endpoints")
+@app.post("/api/ai_endpoints", dependencies=[Depends(verify_token)])
 async def add_ai(ai: AIModel):
     ai_id = db.add_ai_endpoint(ai.model_dump())
     return {"id": ai_id, "status": "success"}
 
-@app.put("/api/ai_endpoints/{ai_id}")
+@app.put("/api/ai_endpoints/{ai_id}", dependencies=[Depends(verify_token)])
 async def update_ai(ai_id: int, ai: AIModel):
     db.update_ai_endpoint(ai_id, ai.model_dump())
     return {"status": "success"}
 
-@app.delete("/api/ai_endpoints/{ai_id}")
+@app.delete("/api/ai_endpoints/{ai_id}", dependencies=[Depends(verify_token)])
 async def delete_ai(ai_id: int):
     db.delete_ai_endpoint(ai_id)
     return {"status": "success"}
 
-@app.post("/api/ai_endpoints/{ai_id}/activate")
+@app.post("/api/ai_endpoints/{ai_id}/activate", dependencies=[Depends(verify_token)])
 async def activate_ai(ai_id: int):
     db.set_active_ai(ai_id)
     return {"status": "success"}
 
-@app.post("/api/ai_endpoints/test")
+@app.post("/api/ai_endpoints/test", dependencies=[Depends(verify_token)])
 async def test_ai(ai: AITestModel):
     handler = AIHandler(ai.api_key, ai.base_url, ai.model, "")
     success, message = await handler.test_connection()
     return {"success": success, "message": message}
 
 # --- 角色管理 API ---
-@app.get("/api/roles")
+@app.get("/api/roles", dependencies=[Depends(verify_token)])
 async def list_roles():
     return db.get_all_roles()
 
-@app.get("/api/roles/{role_id}")
+@app.get("/api/roles/{role_id}", dependencies=[Depends(verify_token)])
 async def get_role(role_id: int):
     role = db.get_role_by_id(role_id)
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
     return role
 
-@app.post("/api/roles")
+@app.post("/api/roles", dependencies=[Depends(verify_token)])
 async def add_role(role: RoleModel):
     role_id = db.add_role(role.model_dump())
     return {"id": role_id, "status": "success"}
 
-@app.put("/api/roles/{role_id}")
+@app.put("/api/roles/{role_id}", dependencies=[Depends(verify_token)])
 async def update_role(role_id: int, role: RoleModel):
     db.update_role(role_id, role.model_dump())
     return {"status": "success"}
 
-@app.delete("/api/roles/{role_id}")
+@app.delete("/api/roles/{role_id}", dependencies=[Depends(verify_token)])
 async def delete_role(role_id: int):
     db.delete_role(role_id)
     return {"status": "success"}
 
-@app.post("/api/roles/{role_id}/activate")
+@app.post("/api/roles/{role_id}/activate", dependencies=[Depends(verify_token)])
 async def activate_role(role_id: int):
     db.set_active_role(role_id)
     app_logger.info("角色管理", f"激活角色 ID: {role_id}")
     return {"status": "success"}
 
 # --- 系统设置 API ---
-@app.get("/api/system_settings")
+@app.get("/api/system_settings", dependencies=[Depends(verify_token)])
 async def get_system_settings():
     return db.get_system_settings()
 
-@app.post("/api/system_settings")
+@app.post("/api/system_settings", dependencies=[Depends(verify_token)])
 async def update_system_settings(settings: SystemSettingsModel):
     data = settings.model_dump()
     for k, v in data.items():
@@ -251,7 +303,7 @@ async def update_system_settings(settings: SystemSettingsModel):
     return {"status": "success"}
 
 # --- 日志管理 API ---
-@app.get("/api/logs")
+@app.get("/api/logs", dependencies=[Depends(verify_token)])
 async def list_logs():
     settings = db.get_system_settings()
     log_path = settings.get("log_path", "../logs")
@@ -272,7 +324,7 @@ async def list_logs():
         })
     return log_files
 
-@app.get("/api/logs/content")
+@app.get("/api/logs/content", dependencies=[Depends(verify_token)])
 async def get_log_content(filename: str, lines: int = 500):
     settings = db.get_system_settings()
     log_path = settings.get("log_path", "../logs")
@@ -315,7 +367,7 @@ async def get_log_content(filename: str, lines: int = 500):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/logs")
+@app.delete("/api/logs", dependencies=[Depends(verify_token)])
 async def clear_logs():
     settings = db.get_system_settings()
     log_path = settings.get("log_path", "../logs")
@@ -339,40 +391,40 @@ async def clear_logs():
         raise HTTPException(status_code=500, detail=str(e))
 
 # --- 快捷命令管理 API ---
-@app.get("/api/command_groups")
+@app.get("/api/command_groups", dependencies=[Depends(verify_token)])
 async def list_command_groups():
     return db.get_all_command_groups()
 
-@app.post("/api/command_groups")
+@app.post("/api/command_groups", dependencies=[Depends(verify_token)])
 async def add_command_group(group: CommandGroupModel):
     group_id = db.add_command_group(group.name)
     return {"id": group_id, "status": "success"}
 
-@app.put("/api/command_groups/{group_id}")
+@app.put("/api/command_groups/{group_id}", dependencies=[Depends(verify_token)])
 async def update_command_group(group_id: int, group: CommandGroupModel):
     db.update_command_group(group_id, group.name)
     return {"status": "success"}
 
-@app.delete("/api/command_groups/{group_id}")
+@app.delete("/api/command_groups/{group_id}", dependencies=[Depends(verify_token)])
 async def delete_command_group(group_id: int):
     db.delete_command_group(group_id)
     return {"status": "success"}
 
-@app.get("/api/commands/{group_id}")
+@app.get("/api/commands/{group_id}", dependencies=[Depends(verify_token)])
 async def list_commands(group_id: int):
     return db.get_commands_by_group(group_id)
 
-@app.post("/api/commands")
+@app.post("/api/commands", dependencies=[Depends(verify_token)])
 async def add_command(cmd: CommandModel):
     cmd_id = db.add_command(cmd.model_dump())
     return {"id": cmd_id, "status": "success"}
 
-@app.put("/api/commands/{cmd_id}")
+@app.put("/api/commands/{cmd_id}", dependencies=[Depends(verify_token)])
 async def update_command(cmd_id: int, cmd: CommandModel):
     db.update_command(cmd_id, cmd.model_dump())
     return {"status": "success"}
 
-@app.delete("/api/commands/{cmd_id}")
+@app.delete("/api/commands/{cmd_id}", dependencies=[Depends(verify_token)])
 async def delete_command(cmd_id: int):
     db.delete_command(cmd_id)
     return {"status": "success"}
@@ -380,6 +432,10 @@ async def delete_command(cmd_id: int):
 # --- WebSocket 终端连接 ---
 @app.websocket("/ws/ssh/{server_id}")
 async def ssh_endpoint(websocket: WebSocket, server_id: int):
+    if not await verify_ws_token(websocket):
+        await websocket.accept()
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     await websocket.accept()
     server_info = db.get_server_by_id(server_id)
     if not server_info:
@@ -434,6 +490,10 @@ async def ssh_endpoint(websocket: WebSocket, server_id: int):
 # --- WebSocket AI 连接 ---
 @app.websocket("/ws/ai")
 async def ai_endpoint(websocket: WebSocket, role_id: Optional[int] = None):
+    if not await verify_ws_token(websocket):
+        await websocket.accept()
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     await websocket.accept()
     
     # 1. 获取角色：优先使用前端传入的 role_id，否则使用全局激活角色
@@ -524,6 +584,10 @@ async def ai_endpoint(websocket: WebSocket, role_id: Optional[int] = None):
 # --- WebSocket 状态采集 (新增) ---
 @app.websocket("/ws/stats/{server_id}")
 async def stats_endpoint(websocket: WebSocket, server_id: int):
+    if not await verify_ws_token(websocket):
+        await websocket.accept()
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     await websocket.accept()
     server_info = db.get_server_by_id(server_id)
     if not server_info:
@@ -533,7 +597,8 @@ async def stats_endpoint(websocket: WebSocket, server_id: int):
         "host": server_info["host"],
         "port": server_info["port"],
         "username": server_info["username"],
-        "password": server_info["password"]
+        "password": server_info["password"],
+        "private_key": server_info.get("private_key")
     }
     
     ssh = SSHHandler(**ssh_config)
@@ -554,13 +619,16 @@ async def stats_endpoint(websocket: WebSocket, server_id: int):
             )
             ssh.write(cmd + "\n")
             
-            await asyncio.sleep(1.5)
+            # 等待数据返回，改为更鲁棒的循环读取
             output = ""
-            for _ in range(8):
-                chunk = ssh.read()
-                if chunk: output += chunk
-                else: break
+            for _ in range(15): # 最多等待 3 秒 (15 * 0.2s)
                 await asyncio.sleep(0.2)
+                chunk = ssh.read()
+                if chunk:
+                    output += chunk
+                    # 如果读到了最后一段分隔符，说明采集完成
+                    if "###PROCS###" in output and len(output.split("###PROCS###")[1].splitlines()) >= 10:
+                        break
             
             stats = parse_stats_output(output, server_info["host"])
             await websocket.send_json(stats)
@@ -683,7 +751,7 @@ def parse_stats_output(output, ip):
     return res
 
 # --- SFTP 管理 API ---
-@app.get("/api/sftp/list")
+@app.get("/api/sftp/list", dependencies=[Depends(verify_token)])
 async def sftp_list(server_id: int, path: str = "/"):
     server_info = db.get_server_by_id(server_id)
     if not server_info:
@@ -693,7 +761,8 @@ async def sftp_list(server_id: int, path: str = "/"):
         host=server_info["host"],
         port=server_info["port"],
         username=server_info["username"],
-        password=server_info["password"]
+        password=server_info["password"],
+        private_key=server_info.get("private_key")
     )
     
     sftp = ssh.open_sftp()
@@ -710,10 +779,11 @@ async def sftp_list(server_id: int, path: str = "/"):
         attr_list = sftp.listdir_attr(path)
         
         # 预定义排序：文件夹在前，文件名升序
-        attr_list.sort(key=lambda x: (not os.path.stat.S_ISDIR(x.st_mode), x.filename.lower()))
+        import stat as py_stat # 补全 import
+        attr_list.sort(key=lambda x: (not py_stat.S_ISDIR(x.st_mode), x.filename.lower()))
         
         for attr in attr_list:
-            is_dir = os.path.stat.S_ISDIR(attr.st_mode)
+            is_dir = py_stat.S_ISDIR(attr.st_mode)
             files.append({
                 "name": attr.filename,
                 "size": attr.st_size if not is_dir else 0,
@@ -733,7 +803,7 @@ async def sftp_list(server_id: int, path: str = "/"):
         if sftp: sftp.close()
         ssh.close()
 
-@app.get("/api/sftp/download")
+@app.get("/api/sftp/download", dependencies=[Depends(verify_token)])
 async def sftp_download(server_id: int, path: str):
     server_info = db.get_server_by_id(server_id)
     if not server_info:
@@ -743,7 +813,8 @@ async def sftp_download(server_id: int, path: str):
         host=server_info["host"],
         port=server_info["port"],
         username=server_info["username"],
-        password=server_info["password"]
+        password=server_info["password"],
+        private_key=server_info.get("private_key")
     )
     
     sftp = ssh.open_sftp()
@@ -775,7 +846,7 @@ async def sftp_download(server_id: int, path: str):
         ssh.close()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/sftp/upload")
+@app.post("/api/sftp/upload", dependencies=[Depends(verify_token)])
 async def sftp_upload(
     server_id: int = Form(...),
     path: str = Form(...),
@@ -789,7 +860,8 @@ async def sftp_upload(
         host=server_info["host"],
         port=server_info["port"],
         username=server_info["username"],
-        password=server_info["password"]
+        password=server_info["password"],
+        private_key=server_info.get("private_key")
     )
     
     sftp = ssh.open_sftp()
@@ -815,10 +887,10 @@ async def sftp_upload(
         if sftp: sftp.close()
         ssh.close()
 
-@app.post("/api/sftp/rename")
+@app.post("/api/sftp/rename", dependencies=[Depends(verify_token)])
 async def sftp_rename(data: SftpRenameModel):
     server_info = db.get_server_by_id(data.server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"])
+    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
     sftp = ssh.open_sftp()
     try:
         sftp.rename(data.old_path, data.new_path)
@@ -829,10 +901,10 @@ async def sftp_rename(data: SftpRenameModel):
         if sftp: sftp.close()
         ssh.close()
 
-@app.post("/api/sftp/chmod")
+@app.post("/api/sftp/chmod", dependencies=[Depends(verify_token)])
 async def sftp_chmod(data: SftpChmodModel):
     server_info = db.get_server_by_id(data.server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"])
+    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
     sftp = ssh.open_sftp()
     try:
         # 将 755 这种字符串转换为八进制整数
@@ -845,10 +917,10 @@ async def sftp_chmod(data: SftpChmodModel):
         if sftp: sftp.close()
         ssh.close()
 
-@app.delete("/api/sftp/delete")
+@app.delete("/api/sftp/delete", dependencies=[Depends(verify_token)])
 async def sftp_delete(data: SftpDeleteModel):
     server_info = db.get_server_by_id(data.server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"])
+    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
     sftp = ssh.open_sftp()
     try:
         if data.is_dir:
@@ -872,10 +944,10 @@ async def sftp_delete(data: SftpDeleteModel):
         if sftp: sftp.close()
         ssh.close()
 
-@app.get("/api/sftp/read")
+@app.get("/api/sftp/read", dependencies=[Depends(verify_token)])
 async def sftp_read(server_id: int, path: str):
     server_info = db.get_server_by_id(server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"])
+    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
     sftp = ssh.open_sftp()
     try:
         stat = sftp.stat(path)
@@ -900,10 +972,10 @@ async def sftp_read(server_id: int, path: str):
         if sftp: sftp.close()
         ssh.close()
 
-@app.post("/api/sftp/save")
+@app.post("/api/sftp/save", dependencies=[Depends(verify_token)])
 async def sftp_save(data: SftpSaveModel):
     server_info = db.get_server_by_id(data.server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"])
+    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
     sftp = ssh.open_sftp()
     try:
         # 写入内容时，也需要以二进制模式打开并手动编码字符串
@@ -916,10 +988,10 @@ async def sftp_save(data: SftpSaveModel):
         if sftp: sftp.close()
         ssh.close()
 
-@app.post("/api/sftp/create")
+@app.post("/api/sftp/create", dependencies=[Depends(verify_token)])
 async def sftp_create(data: SftpCreateModel):
     server_info = db.get_server_by_id(data.server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"])
+    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
     sftp = ssh.open_sftp()
     try:
         if data.type == 'dir':
