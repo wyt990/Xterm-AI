@@ -253,66 +253,122 @@ function initBottomPanel() {
 
 // --- 服务器列表与多级分组逻辑 ---
 
+// 根据设备类型返回 FontAwesome 图标类名
+function getServerIcon(deviceType) {
+    switch ((deviceType || '').toLowerCase()) {
+        case 'windows': return 'fab fa-windows';
+        case 'network': return 'fas fa-network-wired';
+        default:        return 'fas fa-server';
+    }
+}
+
 async function loadServers() {
     try {
         const servers = await api.getServers();
         const container = document.getElementById('server-list-container');
         if (!container) return;
-        
         container.innerHTML = '';
-        const groups = {};
+
+        // ── 1. 构建树结构 ──────────────────────────────────────────
+        // 每个节点形如 { _servers: [], _children: { childName: node } }
+        const tree = {};
         servers.forEach(s => {
-            if (!groups[s.group_name]) groups[s.group_name] = [];
-            groups[s.group_name].push(s);
-        });
-
-        // 读取折叠记忆
-        const collapsedGroups = storage.get('server_groups_collapsed', []);
-
-        Object.keys(groups).forEach(groupName => {
-            const isCollapsed = collapsedGroups.includes(groupName);
-            const groupEl = document.createElement('div');
-            groupEl.className = `server-group ${isCollapsed ? 'collapsed' : ''}`;
-            groupEl.innerHTML = `
-                <div class="group-header">
-                    <i class="fas fa-chevron-down"></i>
-                    <span>${groupName} (${groups[groupName].length})</span>
-                </div>
-                <div class="group-content"></div>
-            `;
-            
-            // 绑定折叠点击并记忆状态
-            groupEl.querySelector('.group-header').onclick = () => {
-                groupEl.classList.toggle('collapsed');
-                let current = storage.get('server_groups_collapsed', []);
-                if (groupEl.classList.contains('collapsed')) {
-                    if (!current.includes(groupName)) current.push(groupName);
+            const parts = (s.group_name || 'default').split('/');
+            let node = tree;
+            parts.forEach((part, i) => {
+                if (!node[part]) node[part] = { _servers: [], _children: {} };
+                if (i === parts.length - 1) {
+                    node[part]._servers.push(s);
                 } else {
-                    current = current.filter(g => g !== groupName);
+                    node = node[part]._children;
                 }
-                storage.set('server_groups_collapsed', current);
-            };
-
-            const content = groupEl.querySelector('.group-content');
-            groups[groupName].forEach(server => {
-                const card = document.createElement('div');
-                card.className = 'server-card';
-                card.innerHTML = `
-                    <div class="server-card-icon"><i class="fas fa-server"></i></div>
-                    <div class="server-card-info">
-                        <h4>${server.name}</h4>
-                        <p>${server.host}:${server.port}</p>
-                    </div>
-                    <div class="server-card-actions">
-                        <button class="btn-icon" title="编辑" onclick="event.stopPropagation(); showEditServerModal(${server.id})"><i class="fas fa-edit"></i></button>
-                        <button class="btn-icon" title="删除" onclick="event.stopPropagation(); deleteServer(${server.id}, '${server.name.replace(/'/g, "\\'")}')"><i class="fas fa-trash-alt"></i></button>
-                    </div>
-                `;
-                card.onclick = () => connectToServer(server);
-                content.appendChild(card);
             });
-            container.appendChild(groupEl);
         });
+
+        // ── 2. 读取折叠记忆（key: 路径字符串 → true=折叠） ─────────
+        const collapsed = storage.get('server_tree_collapsed', {});
+
+        // ── 3. 统计节点下的服务器总数（含子层） ───────────────────
+        function countTotal(node) {
+            let n = node._servers.length;
+            Object.values(node._children).forEach(c => { n += countTotal(c); });
+            return n;
+        }
+
+        // ── 4. 递归构建 DOM 节点 ──────────────────────────────────
+        function renderNode(name, node, parentPath, level) {
+            const path = parentPath ? `${parentPath}/${name}` : name;
+            const isCollapsed = !!collapsed[path];
+            const total = countTotal(node);
+            const hasChildren = Object.keys(node._children).length > 0 || node._servers.length > 0;
+
+            const nodeEl = document.createElement('div');
+            nodeEl.className = `tree-node tree-level-${level}${isCollapsed ? ' collapsed' : ''}`;
+
+            // 节点标题行
+            const header = document.createElement('div');
+            header.className = 'tree-node-header';
+            header.innerHTML = `
+                <i class="fas fa-chevron-down tree-chevron"></i>
+                <i class="fas ${isCollapsed ? 'fa-folder' : 'fa-folder-open'} tree-folder-icon"></i>
+                <span class="tree-label" title="${name}">${name}</span>
+                <span class="tree-count">${total}</span>
+            `;
+            header.onclick = () => {
+                nodeEl.classList.toggle('collapsed');
+                const nowCollapsed = nodeEl.classList.contains('collapsed');
+                header.querySelector('.tree-folder-icon').className =
+                    `fas ${nowCollapsed ? 'fa-folder' : 'fa-folder-open'} tree-folder-icon`;
+                const col = storage.get('server_tree_collapsed', {});
+                if (nowCollapsed) { col[path] = true; } else { delete col[path]; }
+                storage.set('server_tree_collapsed', col);
+            };
+            nodeEl.appendChild(header);
+
+            // 子内容区（子分组 + 本层服务器卡片）
+            const children = document.createElement('div');
+            children.className = 'tree-node-children';
+
+            // 先渲染子分组（字母排序）
+            Object.keys(node._children).sort().forEach(childName => {
+                children.appendChild(renderNode(childName, node._children[childName], path, level + 1));
+            });
+
+            // 再渲染本层直属服务器
+            if (node._servers.length > 0) {
+                const grid = document.createElement('div');
+                grid.className = 'server-grid';
+                node._servers.forEach(server => {
+                    const card = document.createElement('div');
+                    card.className = 'server-card';
+                    const icon = getServerIcon(server.device_type);
+                    const safeName = server.name.replace(/'/g, "\\'");
+                    card.innerHTML = `
+                        <div class="server-card-icon"><i class="${icon}"></i></div>
+                        <div class="server-card-info">
+                            <h4>${server.name}</h4>
+                            <p>${server.host}:${server.port}</p>
+                        </div>
+                        <div class="server-card-actions">
+                            <button class="btn-icon" title="编辑" onclick="event.stopPropagation(); showEditServerModal(${server.id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn-icon" title="删除" onclick="event.stopPropagation(); deleteServer(${server.id}, '${safeName}')"><i class="fas fa-trash-alt"></i></button>
+                        </div>
+                    `;
+                    card.onclick = () => connectToServer(server);
+                    grid.appendChild(card);
+                });
+                children.appendChild(grid);
+            }
+
+            nodeEl.appendChild(children);
+            return nodeEl;
+        }
+
+        // ── 5. 渲染顶层节点（字母排序） ───────────────────────────
+        Object.keys(tree).sort().forEach(name => {
+            container.appendChild(renderNode(name, tree[name], '', 1));
+        });
+
     } catch (err) { notify("加载服务器失败", 'error'); }
 }
 
