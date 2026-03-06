@@ -176,12 +176,27 @@ function startAIStream(prompt, tab) {
     openAISocket(tab.chatHistory, tab);
 }
 
+// 清洗终端原始输出：去除 ANSI/VT100 转义序列、控制字符，统一换行符
+function cleanTerminalOutput(raw) {
+    return raw
+        .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')          // CSI 序列（颜色、光标移动等）
+        .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '') // OSC 序列（标题设置等）
+        .replace(/\x1b[()][A-Z0-9]/g, '')                 // 字符集切换序列
+        .replace(/\x1b[A-Za-z]/g, '')                     // 其他单字节 ESC 序列
+        .replace(/[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]/g, '') // 退格、Bell、NUL 等控制字符
+        .replace(/\r\n/g, '\n')                            // Windows CRLF → LF
+        .replace(/\r/g, '\n')                              // 单独 CR → LF
+        .replace(/\n{3,}/g, '\n\n')                        // 压缩连续空行
+        .trim();
+}
+
 // 捕获终端输出后自动提交给 AI 分析
 function sendCaptureToAI(tabId, output) {
     const tab = window.getTab(tabId);
     if (!tab || isAiProcessing) return;
 
-    const feedback = `命令执行结果如下：\n\`\`\`\n${output}\n\`\`\`\n请分析结果并给出下一步建议。`;
+    const cleanOutput = cleanTerminalOutput(output);
+    const feedback = `命令执行结果如下：\n\`\`\`\n${cleanOutput}\n\`\`\`\n请分析结果并给出下一步建议。`;
 
     // 在聊天区显示"结果已同步"提示
     const sysDiv = createMessageDiv('system');
