@@ -313,22 +313,22 @@
     text-overflow: ellipsis;
 }
 
-.tab-close {
+.editor-tab .tab-close {
     opacity: 0;
-    width: 16px;
-    height: 16px;
+    width: 22px;
+    height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 3px;
-    font-size: 14px;
+    font-size: 18px;
     line-height: 1;
     flex-shrink: 0;
     transition: opacity 0.12s, background 0.12s;
 }
 .editor-tab:hover .tab-close,
 .editor-tab.active .tab-close { opacity: 1; }
-.tab-close:hover { background: rgba(255,255,255,0.15); }
+.editor-tab .tab-close:hover { background: rgba(255,255,255,0.15); }
 
 /* ===== Ace 编辑器容器 ===== */
 .ace-editor-container {
