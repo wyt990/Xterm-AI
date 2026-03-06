@@ -214,6 +214,16 @@
                                     <div class="gauge-bar"><div id="info-disk-bar" class="gauge-fill" style="width: 0%"></div></div>
                                 </div>
 
+                                <!-- 监控趋势图 -->
+                                <div class="info-section trend-charts">
+                                    <div class="chart-container" style="height: 120px; margin-bottom: 15px;">
+                                        <canvas id="cpu-trend-chart"></canvas>
+                                    </div>
+                                    <div class="chart-container" style="height: 120px;">
+                                        <canvas id="mem-trend-chart"></canvas>
+                                    </div>
+                                </div>
+
                                 <div class="info-section">
                                     <table class="proc-table">
                                         <thead>
@@ -221,6 +231,7 @@
                                                 <th class="sortable" data-sort="mem">内存 <i class="fas fa-sort"></i></th>
                                                 <th class="sortable" data-sort="cpu">CPU <i class="fas fa-sort"></i></th>
                                                 <th class="sortable" data-sort="cmd">命令 <i class="fas fa-sort"></i></th>
+                                                <th style="width: 50px;">操作</th>
                                             </tr>
                                         </thead>
                                         <tbody id="proc-list">
@@ -328,6 +339,7 @@
     <script src="/static/js/xterm.js"></script>
     <script src="/static/js/xterm-addon-fit.js"></script>
     <script src="/static/js/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/static/lib/ace/ace.js"></script>
     <script src="/static/lib/ace/ext-language_tools.js"></script>
     <script src="/static/lib/ace/ext-modelist.js"></script>

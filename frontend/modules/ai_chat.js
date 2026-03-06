@@ -339,15 +339,29 @@ function processAIResponseForCommands(text, msgDiv, tab) {
 
 // 渲染指令卡片
 function renderCommandCard(command, container, tab) {
+    const dangerousPatterns = [
+        /rm\s+-rf\s+\//, /rm\s+-rf\s+\*/, /mkfs/, /dd\s+if=/, /:\(\)\{\s*:\s*\|\s*:\s*&\s*\}\s*;/, // 叉子炸弹
+        />\s*\/dev\/sd/, /chmod\s+-R\s+777\s+\//, /chown\s+-R\s+.*?\s+\//, /shred/, /format\s+/
+    ];
+    const isDangerous = dangerousPatterns.some(p => p.test(command));
+
     const card = document.createElement('div');
-    card.className = 'command-card';
+    card.className = `command-card${isDangerous ? ' dangerous' : ''}`;
     card.innerHTML = `
-        <div class="command-card-header"><i class="fas fa-terminal"></i> <span>SSH 命令执行</span></div>
+        <div class="command-card-header">
+            <i class="fas ${isDangerous ? 'fa-exclamation-triangle' : 'fa-terminal'}"></i> 
+            <span>${isDangerous ? '高危命令执行确认' : 'SSH 命令执行'}</span>
+        </div>
         <div class="command-card-body"><code>${command}</code></div>
         <div class="command-card-footer">
-            <div class="command-card-tip"><i class="fas fa-shield-alt"></i> 需要确认</div>
+            <div class="command-card-tip">
+                <i class="fas fa-shield-alt"></i> 
+                ${isDangerous ? '<span style="color:#ff4d4f;font-weight:bold">警告：此操作具有破坏性！</span>' : '需要确认'}
+            </div>
             <div class="command-actions">
-                <button class="btn btn-sm btn-primary btn-confirm"><i class="fas fa-check"></i> 同意</button>
+                <button class="btn btn-sm ${isDangerous ? 'btn-danger' : 'btn-primary'} btn-confirm">
+                    <i class="fas fa-check"></i> ${isDangerous ? '强制执行' : '同意'}
+                </button>
                 <button class="btn btn-sm btn-secondary btn-reject"><i class="fas fa-times"></i> 拒绝</button>
             </div>
         </div>
@@ -357,6 +371,11 @@ function renderCommandCard(command, container, tab) {
     const rejectBtn = card.querySelector('.btn-reject');
 
     confirmBtn.onclick = () => {
+        if (isDangerous) {
+            if (!confirm(`【极高风险警告】\n\n您正准备执行一条可能具有破坏性的命令：\n\n${command}\n\n该操作无法撤销，可能导致系统损坏或数据丢失。确定要继续吗？`)) {
+                return;
+            }
+        }
         card.innerHTML = `<div class="command-card-header" style="color:#4caf50"><i class="fas fa-check-circle"></i> 命令已发送执行</div><div class="command-card-body"><code>${command}</code></div>`;
         executeAICommand(command, tab);
     };

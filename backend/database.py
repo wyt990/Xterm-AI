@@ -105,16 +105,16 @@ class Database:
                 )
             ''')
             
-            # 6. 快捷命令表
+            # 7. 历史指标表
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS commands (
+                CREATE TABLE IF NOT EXISTS server_stats_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    group_id INTEGER,
-                    name TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    auto_cr INTEGER DEFAULT 1,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (group_id) REFERENCES command_groups(id)
+                    server_id INTEGER,
+                    cpu REAL,
+                    mem REAL,
+                    disk REAL,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (server_id) REFERENCES servers(id)
                 )
             ''')
             
@@ -412,4 +412,35 @@ class Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('DELETE FROM commands WHERE id = ?', (cmd_id,))
+            conn.commit()
+
+    # --- 监控历史记录 ---
+    def add_stats_history(self, server_id, cpu, mem, disk=0):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO server_stats_history (server_id, cpu, mem, disk)
+                VALUES (?, ?, ?, ?)
+            ''', (server_id, cpu, mem, disk))
+            conn.commit()
+
+    def get_stats_history(self, server_id, minutes=30):
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            # 这里的 timestamp 是 UTC 时间，sqlite 的 datetime('now') 也是 UTC
+            cursor.execute('''
+                SELECT cpu, mem, disk, strftime('%H:%M', datetime(timestamp, 'localtime')) as time_label
+                FROM server_stats_history 
+                WHERE server_id = ? 
+                AND timestamp >= datetime('now', ?)
+                ORDER BY timestamp ASC
+            ''', (server_id, f'-{minutes} minutes'))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def clean_stats_history(self, days=7):
+        """清理 7 天之前的历史记录"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM server_stats_history WHERE timestamp < datetime('now', ?)", (f'-{days} days',))
             conn.commit()

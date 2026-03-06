@@ -253,6 +253,22 @@
     max-width: 150px;
 }
 
+.btn-kill {
+    background: transparent;
+    border: none;
+    color: #ff4d4f;
+    cursor: pointer;
+    padding: 2px 5px;
+    border-radius: 3px;
+    transition: background 0.12s;
+    font-size: 11px;
+}
+
+.btn-kill:hover {
+    background: rgba(255, 77, 79, 0.2);
+}
+
+
 .bottom-panel-content {
     flex: 1;
     overflow: hidden;

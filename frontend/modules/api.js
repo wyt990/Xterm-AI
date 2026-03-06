@@ -4,10 +4,20 @@
 
 async function request(url, options = {}) {
     const token = localStorage.getItem('xterm_token');
-    const headers = {
-        'Content-Type': 'application/json',
-        ...options.headers,
-    };
+    
+    // 基础头信息
+    const headers = { ...options.headers };
+    
+    // 如果没有显式设置 Content-Type，且 body 不是 FormData，则默认为 JSON
+    if (!headers['Content-Type'] && !(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+    }
+    
+    // 如果显式将 Content-Type 设为 undefined，则删除该头（用于让 fetch 自动处理 FormData 边界）
+    if (headers['Content-Type'] === undefined) {
+        delete headers['Content-Type'];
+    }
+
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
@@ -83,5 +93,16 @@ export const api = {
     sftpDelete: (data) => request('/api/sftp/delete', { method: 'DELETE', body: JSON.stringify(data) }),
     sftpCreate: (data) => request('/api/sftp/create', { method: 'POST', body: JSON.stringify(data) }),
     sftpRead: (serverId, path) => request(`/api/sftp/read?server_id=${serverId}&path=${encodeURIComponent(path)}`),
-    sftpSave: (data) => request('/api/sftp/save', { method: 'POST', body: JSON.stringify(data) })
+    sftpSave: (data) => request('/api/sftp/save', { method: 'POST', body: JSON.stringify(data) }),
+
+    // 系统指标与监控
+    getStatsHistory: (serverId, minutes = 30) => request(`/api/servers/${serverId}/stats/history?minutes=${minutes}`),
+    killProcess: (serverId, pid) => {
+        const fd = new FormData();
+        fd.append('pid', pid);
+        return request(`/api/servers/${serverId}/process/kill`, { method: 'POST', body: fd, headers: { 'Content-Type': undefined } });
+    },
+    
+    // 暴露通用请求方法
+    request
 };

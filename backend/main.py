@@ -10,6 +10,7 @@ import json
 import glob
 import io
 import jwt
+import stat
 from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
@@ -615,7 +616,7 @@ async def stats_endpoint(websocket: WebSocket, server_id: int):
                 "echo '###MEM###' && free -m && "
                 "echo '###DISK###' && df -h / | tail -1 && "
                 "echo '###CPU_CORES###' && nproc && "
-                "echo '###PROCS###' && ps -eo pmem,pcpu,comm --sort=-pcpu | head -12"
+                "echo '###PROCS###' && ps -eo pmem,pcpu,pid,comm --sort=-pcpu | head -12"
             )
             ssh.write(cmd + "\n")
             
@@ -632,6 +633,17 @@ async def stats_endpoint(websocket: WebSocket, server_id: int):
             
             stats = parse_stats_output(output, server_info["host"])
             await websocket.send_json(stats)
+            
+            # 记录历史指标：每分钟大约记录一次
+            # 获取当前分钟数，如果与上一次不同，则记录
+            current_minute = datetime.now().minute
+            if not hasattr(websocket, 'last_recorded_minute') or websocket.last_recorded_minute != current_minute:
+                try:
+                    # 将 mem_p 和 disk_p 存入数据库
+                    db.add_stats_history(server_id, stats['cpu'], stats['mem_p'], stats['disk_p'])
+                    websocket.last_recorded_minute = current_minute
+                except Exception as e:
+                    print(f"Error saving stats history: {e}")
             
             await asyncio.sleep(5)  # 每 5 秒更新一次
     except Exception:
@@ -735,13 +747,14 @@ def parse_stats_output(output, ip):
                     started = True
                     continue
                 if started and l.strip():
-                    parts = l.split(None, 2)
-                    if len(parts) >= 3:
+                    parts = l.split(None, 3)
+                    if len(parts) >= 4:
                         try:
                             res['procs'].append({
                                 "mem": parts[0] + "%",
                                 "cpu": parts[1] + "%",
-                                "cmd": parts[2].strip(),
+                                "pid": parts[2],
+                                "cmd": parts[3].strip(),
                             })
                         except Exception:
                             pass
@@ -749,6 +762,38 @@ def parse_stats_output(output, ip):
     except Exception:
         pass
     return res
+
+@app.get("/api/servers/{server_id}/stats/history", dependencies=[Depends(verify_token)])
+async def get_server_stats_history(server_id: int, minutes: int = 30):
+    """获取过去 X 分钟的历史指标数据"""
+    return db.get_stats_history(server_id, minutes)
+
+@app.post("/api/servers/{server_id}/process/kill", dependencies=[Depends(verify_token)])
+async def kill_process(server_id: int, pid: int = Form(...)):
+    """杀死指定 PID 的进程"""
+    server_info = db.get_server_by_id(server_id)
+    if not server_info:
+        raise HTTPException(status_code=404, detail="Server not found")
+    
+    ssh = SSHHandler(
+        host=server_info["host"],
+        port=server_info["port"],
+        username=server_info["username"],
+        password=server_info["password"],
+        private_key=server_info.get("private_key")
+    )
+    if not ssh.connect():
+        raise HTTPException(status_code=500, detail="Failed to connect to server")
+    
+    try:
+        # 使用 sudo 执行 kill (如果用户有权限的话)，否则普通 kill
+        # 为安全起见，这里先简单 kill，后续可考虑增加权限判断
+        ssh.write(f"kill -9 {pid}\n")
+        return {"status": "success", "message": f"Sent kill signal to PID {pid}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        ssh.close()
 
 # --- SFTP 管理 API ---
 @app.get("/api/sftp/list", dependencies=[Depends(verify_token)])
