@@ -1,56 +1,94 @@
-<!-- 文件编辑器弹窗 -->
+<!-- 文件编辑器（全屏，含目录树 + 多标签）-->
 <div id="editor-modal" class="editor-modal">
     <div class="editor-modal-content">
+        <!-- 工具栏 -->
         <div class="editor-toolbar">
-            <div class="toolbar-left" style="display: flex; gap: 10px; align-items: center;">
-                <button class="btn btn-sm btn-primary" onclick="saveEditorContent()" title="Ctrl+S"><i class="fas fa-save"></i> 保存</button>
-                <button class="btn btn-sm btn-secondary" onclick="refreshEditorContent()"><i class="fas fa-sync-alt"></i> 刷新</button>
-                <span id="editor-filename" class="editor-filename" style="color: #eee; font-size: 14px; font-weight: bold; margin-left: 10px;">filename.txt</span>
-                <div class="toolbar-separator" style="width: 1px; height: 20px; background: #444; margin: 0 5px;"></div>
-                <button class="btn btn-sm btn-secondary" onclick="toggleEditorSearch('find')"><i class="fas fa-search"></i> 搜索</button>
-                <button class="btn btn-sm btn-secondary" onclick="toggleEditorSearch('replace')"><i class="fas fa-exchange-alt"></i> 替换</button>
-                <button class="btn btn-sm btn-secondary" onclick="showJumpLine()"><i class="fas fa-long-arrow-alt-right"></i> 跳转行</button>
+            <div class="toolbar-left">
+                <span class="editor-app-title"><i class="fas fa-code"></i> 在线文本编辑器</span>
+                <div class="toolbar-sep"></div>
+                <button class="edt-btn" onclick="saveEditorContent()" title="Ctrl+S"><i class="fas fa-save"></i> 保存</button>
+                <button class="edt-btn" onclick="saveAllEditorTabs()"><i class="fas fa-save"></i> 全部保存</button>
+                <button class="edt-btn" onclick="refreshEditorContent()"><i class="fas fa-sync-alt"></i> 刷新</button>
+                <div class="toolbar-sep"></div>
+                <button class="edt-btn" onclick="toggleEditorSearch('find')"><i class="fas fa-search"></i> 搜索</button>
+                <button class="edt-btn" onclick="toggleEditorSearch('replace')"><i class="fas fa-exchange-alt"></i> 替换</button>
+                <button class="edt-btn" onclick="showJumpLine()"><i class="fas fa-long-arrow-alt-right"></i> 跳转行</button>
             </div>
-            <div class="toolbar-right" style="display: flex; gap: 10px; align-items: center;">
-                <div class="editor-settings-item">
-                    <label style="font-size: 12px; color: #888; margin-right: 5px;">主题</label>
-                    <select id="editor-theme-select" onchange="changeEditorTheme(this.value)" style="background: #3c3c3c; color: #eee; border: 1px solid #444; padding: 2px 5px; border-radius: 3px;">
-                        <option value="monokai">Monokai</option>
-                        <option value="chrome">Chrome</option>
-                        <option value="clouds_midnight">Clouds Midnight</option>
-                        <option value="tomorrow_night_bright">Tomorrow Night</option>
-                    </select>
-                </div>
-                <div class="editor-settings-item">
-                    <label style="font-size: 12px; color: #888; margin-right: 5px;">字号</label>
-                    <select id="editor-font-size" onchange="changeEditorFontSize(this.value)" style="background: #3c3c3c; color: #eee; border: 1px solid #444; padding: 2px 5px; border-radius: 3px;">
-                        <option value="12px">12px</option>
-                        <option value="14px" selected>14px</option>
-                        <option value="16px">16px</option>
-                        <option value="18px">18px</option>
-                        <option value="20px">20px</option>
-                    </select>
-                </div>
-                <div class="dropdown" style="position: relative;">
-                    <button class="btn btn-sm btn-secondary dropdown-toggle" onclick="toggleEditorSettingsMenu()"><i class="fas fa-cog"></i> 设置 <i class="fas fa-caret-down"></i></button>
-                    <div id="editor-settings-menu" class="dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; background: #2d2d2d; border: 1px solid #444; padding: 10px; border-radius: 4px; z-index: 100; min-width: 150px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
-                        <label class="dropdown-item" style="display: block; margin-bottom: 5px; cursor: pointer;"><input type="checkbox" id="edit-wrap" onchange="toggleEditorOption('wrap', this.checked)"> 自动换行</label>
-                        <label class="dropdown-item" style="display: block; margin-bottom: 5px; cursor: pointer;"><input type="checkbox" id="edit-autocomplete" checked onchange="toggleEditorOption('autocomplete', this.checked)"> 代码自动完成</label>
-                        <label class="dropdown-item" style="display: block; margin-bottom: 5px; cursor: pointer;"><input type="checkbox" id="edit-snippets" onchange="toggleEditorOption('snippets', this.checked)"> 启用代码段</label>
-                        <label class="dropdown-item" style="display: block; margin-bottom: 5px; cursor: pointer;"><input type="checkbox" id="edit-invisible" onchange="toggleEditorOption('invisible', this.checked)"> 显示隐形字符</label>
-                        <label class="dropdown-item" style="display: block; margin-bottom: 0; cursor: pointer;"><input type="checkbox" id="edit-linenumbers" checked onchange="toggleEditorOption('linenumbers', this.checked)"> 显示行号</label>
+            <div class="toolbar-right">
+                <label class="edt-label">字体大小</label>
+                <select id="editor-font-size" onchange="changeEditorFontSize(this.value)" class="edt-select">
+                    <option value="12px">12px</option>
+                    <option value="14px" selected>14px</option>
+                    <option value="16px">16px</option>
+                    <option value="18px">18px</option>
+                    <option value="20px">20px</option>
+                </select>
+                <label class="edt-label">主题</label>
+                <select id="editor-theme-select" onchange="changeEditorTheme(this.value)" class="edt-select">
+                    <option value="monokai">Monokai</option>
+                    <option value="chrome">Chrome</option>
+                    <option value="clouds_midnight">Clouds Midnight</option>
+                    <option value="tomorrow_night_bright">Tomorrow Night</option>
+                </select>
+                <div style="position:relative">
+                    <button class="edt-btn" onclick="toggleEditorSettingsMenu()"><i class="fas fa-cog"></i> 设置 <i class="fas fa-caret-down"></i></button>
+                    <div id="editor-settings-menu" style="display:none;position:absolute;right:0;top:100%;background:#2d2d2d;border:1px solid #444;padding:10px;border-radius:4px;z-index:2100;min-width:160px;box-shadow:0 4px 10px rgba(0,0,0,0.4);">
+                        <label style="display:block;margin-bottom:6px;cursor:pointer;font-size:13px;color:#ccc"><input type="checkbox" id="edit-wrap" onchange="toggleEditorOption('wrap',this.checked)"> 自动换行</label>
+                        <label style="display:block;margin-bottom:6px;cursor:pointer;font-size:13px;color:#ccc"><input type="checkbox" id="edit-autocomplete" checked onchange="toggleEditorOption('autocomplete',this.checked)"> 代码自动完成</label>
+                        <label style="display:block;margin-bottom:6px;cursor:pointer;font-size:13px;color:#ccc"><input type="checkbox" id="edit-invisible" onchange="toggleEditorOption('invisible',this.checked)"> 显示隐形字符</label>
+                        <label style="display:block;cursor:pointer;font-size:13px;color:#ccc"><input type="checkbox" id="edit-linenumbers" checked onchange="toggleEditorOption('linenumbers',this.checked)"> 显示行号</label>
                     </div>
                 </div>
-                <button class="btn btn-sm btn-secondary" onclick="showShortcuts()"><i class="fas fa-keyboard"></i> 快捷键</button>
-                <span class="close" onclick="closeEditorModal()" style="font-size: 20px; cursor: pointer; color: #888; margin-left: 10px;">&times;</span>
+                <button class="edt-btn" onclick="showShortcuts()"><i class="fas fa-keyboard"></i> 快捷键</button>
+                <button class="edt-btn edt-btn-close" onclick="closeEditorModal()" title="关闭"><i class="fas fa-times"></i></button>
             </div>
         </div>
-        <div class="ace-editor-container">
-            <div id="ace-editor"></div>
+
+        <!-- 主体：目录树 + 编辑区 -->
+        <div class="editor-main">
+            <!-- 左侧目录树 -->
+            <div class="editor-filetree" id="editor-filetree">
+                <div class="filetree-header">
+                    <div class="filetree-path-row">
+                        <input type="text" id="filetree-path-input" class="filetree-path-input" placeholder="目录路径"
+                               onkeydown="if(event.key==='Enter') editorNavigateTo()" />
+                        <button class="filetree-go-btn" onclick="editorNavigateTo()" title="跳转">
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                    <div class="filetree-actions-row">
+                        <button class="filetree-action-btn" onclick="editorNewFile()" title="新建文件">
+                            <i class="fas fa-file-medical"></i> 文件
+                        </button>
+                        <button class="filetree-action-btn" onclick="editorNewDir()" title="新建目录">
+                            <i class="fas fa-folder-plus"></i> 目录
+                        </button>
+                        <button class="filetree-action-btn" onclick="refreshFiletree()" title="刷新">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="filetree-body" id="filetree-body">
+                    <div class="filetree-empty"><i class="fas fa-folder-open"></i><br>打开文件后显示目录树</div>
+                </div>
+            </div>
+
+            <!-- 拖拽调宽手柄 -->
+            <div class="editor-tree-resizer" id="editor-tree-resizer"></div>
+
+            <!-- 右侧：多标签 + Ace 编辑器 -->
+            <div class="editor-area" id="editor-area">
+                <div class="editor-tab-bar" id="editor-tab-bar"></div>
+                <div class="ace-editor-container">
+                    <div id="ace-editor"></div>
+                </div>
+            </div>
         </div>
+
+        <!-- 底部状态栏 -->
         <div class="editor-footer">
             <div class="footer-left">
-                <span id="editor-status-path">/path/to/file</span>
+                <span id="editor-status-path">/</span>
             </div>
             <div class="footer-right">
                 <span id="editor-status-info">Ln: 1, Col: 1</span>
@@ -69,9 +107,20 @@
     </div>
 </div>
 
-<!-- 弹窗：编辑器跳转行 -->
+<!-- 目录树右键菜单 -->
+<div id="editor-context-menu" class="editor-context-menu">
+    <div class="ctx-item ctx-open" onclick="editorContextAction('open')"><i class="fas fa-file-alt"></i> 打开文件</div>
+    <div class="ctx-separator"></div>
+    <div class="ctx-item" onclick="editorContextAction('new-file')"><i class="fas fa-file-medical"></i> 新建文件</div>
+    <div class="ctx-item" onclick="editorContextAction('new-dir')"><i class="fas fa-folder-plus"></i> 新建目录</div>
+    <div class="ctx-separator"></div>
+    <div class="ctx-item" onclick="editorContextAction('rename')"><i class="fas fa-edit"></i> 重命名</div>
+    <div class="ctx-item ctx-danger" onclick="editorContextAction('delete')"><i class="fas fa-trash-alt"></i> 删除</div>
+</div>
+
+<!-- 弹窗：跳转行 -->
 <div id="editor-jump-modal" class="modal">
-    <div class="modal-content" style="width: 300px;">
+    <div class="modal-content" style="width:300px">
         <div class="modal-header">
             <h3>跳转到行</h3>
             <span class="close" onclick="closeModal('editor-jump-modal')">&times;</span>
@@ -89,23 +138,23 @@
     </div>
 </div>
 
-<!-- 弹窗：编辑器快捷键 -->
+<!-- 弹窗：快捷键 -->
 <div id="editor-shortcuts-modal" class="modal">
-    <div class="modal-content" style="width: 400px;">
+    <div class="modal-content" style="width:400px">
         <div class="modal-header">
             <h3>编辑器快捷键</h3>
             <span class="close" onclick="closeModal('editor-shortcuts-modal')">&times;</span>
         </div>
-        <div class="modal-body" style="padding: 20px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem;">
-                <div style="color: #888;">保存</div><div style="color: #0078d4; font-weight: bold;">Ctrl + S</div>
-                <div style="color: #888;">搜索</div><div style="color: #0078d4; font-weight: bold;">Ctrl + F</div>
-                <div style="color: #888;">替换</div><div style="color: #0078d4; font-weight: bold;">Ctrl + H</div>
-                <div style="color: #888;">跳转行</div><div style="color: #0078d4; font-weight: bold;">Ctrl + G</div>
-                <div style="color: #888;">全选</div><div style="color: #0078d4; font-weight: bold;">Ctrl + A</div>
-                <div style="color: #888;">撤销</div><div style="color: #0078d4; font-weight: bold;">Ctrl + Z</div>
-                <div style="color: #888;">重做</div><div style="color: #0078d4; font-weight: bold;">Ctrl + Y</div>
-                <div style="color: #888;">注释/取消</div><div style="color: #0078d4; font-weight: bold;">Ctrl + /</div>
+        <div class="modal-body" style="padding:20px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:0.9rem">
+                <div style="color:#888">保存</div><div style="color:#0078d4;font-weight:bold">Ctrl + S</div>
+                <div style="color:#888">搜索</div><div style="color:#0078d4;font-weight:bold">Ctrl + F</div>
+                <div style="color:#888">替换</div><div style="color:#0078d4;font-weight:bold">Ctrl + H</div>
+                <div style="color:#888">跳转行</div><div style="color:#0078d4;font-weight:bold">Ctrl + G</div>
+                <div style="color:#888">全选</div><div style="color:#0078d4;font-weight:bold">Ctrl + A</div>
+                <div style="color:#888">撤销</div><div style="color:#0078d4;font-weight:bold">Ctrl + Z</div>
+                <div style="color:#888">重做</div><div style="color:#0078d4;font-weight:bold">Ctrl + Y</div>
+                <div style="color:#888">注释/取消</div><div style="color:#0078d4;font-weight:bold">Ctrl + /</div>
             </div>
         </div>
         <div class="modal-footer">
