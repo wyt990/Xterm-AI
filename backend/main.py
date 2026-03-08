@@ -91,6 +91,7 @@ class ServerModel(BaseModel):
     private_key: Optional[str] = None
     group_name: str = "default"
     device_type: str = "linux"
+    device_type_id: Optional[int] = None
     description: Optional[str] = None
 
 class AIModel(BaseModel):

@@ -53,6 +53,17 @@ export function initSFTPModule() {
     });
     window.addEventListener('tabSwitched', (e) => {
         const tab = e.detail.tab;
+        // 网络设备不支持 SFTP
+        const dtype = (tab.config.device_type_value || tab.config.device_type || '').toLowerCase();
+        const isNetworkDevice = ['h3c', 'huawei', 'cisco', 'ruijie', 'network'].includes(dtype);
+        
+        if (isNetworkDevice) {
+            if (filesContainer) filesContainer.innerHTML = '<div class="sftp-empty" style="padding: 20px; text-align: center; color: #888;">当前设备不支持 SFTP</div>';
+            if (pathInput) pathInput.value = '';
+            currentPath = '/';
+            return;
+        }
+
         // 空字符串也合法（后端解析为家目录），不能用 || '/' 覆盖掉
         currentPath = tab.sftpCurrentPath ?? '';
         loadFiles(currentPath);
@@ -83,8 +94,18 @@ export async function loadFiles(path) {
     const tab = window.getTab(activeTabId);
     if (!tab) return;
 
+    // 记录发起请求时的 tabId
+    const requestId = activeTabId;
+
     try {
         const res = await api.sftpList(tab.config.id, path);
+        
+        // 如果请求回来时，标签已经切换了，则忽略结果
+        if (activeTabId !== requestId) {
+            console.log("SFTP: 标签已切换，忽略上个标签的列表结果");
+            return;
+        }
+
         const files = res.files || [];
         
         if (!Array.isArray(files)) {
@@ -101,6 +122,8 @@ export async function loadFiles(path) {
         sftpSelectedFile = null;
         renderFileList(files);
     } catch (err) {
+        // 如果请求失败时，标签已经切换了，静默失败（避免前一个标签的报错干扰当前标签）
+        if (activeTabId !== requestId) return;
         console.error("加载文件失败:", err);
     }
 }
