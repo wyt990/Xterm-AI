@@ -42,6 +42,11 @@
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-mono: 'Fira Code', 'Consolas', monospace;
 
+    /* 布局变量（支持响应式与 Resizer 联动） */
+    --sidebar-width: 200px;
+    --sidebar-width-collapsed: 60px;
+    --ai-section-width: 350px;
+
     /* 动画 */
     --transition-fast: 0.1s ease;
     --transition-normal: 0.2s ease;

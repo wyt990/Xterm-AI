@@ -224,10 +224,14 @@ function initLayoutResizer() {
         if (!currentResizer) return;
         if (currentResizer === 'sidebar') {
             const newWidth = e.clientX;
-            if (newWidth > 60 && newWidth < 500) sidebar.style.width = `${newWidth}px`;
+            if (newWidth > 60 && newWidth < 500) {
+                document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
+            }
         } else if (currentResizer === 'ai') {
             const newWidth = window.innerWidth - e.clientX;
-            if (newWidth > 0 && newWidth < 600) aiSection.style.width = `${newWidth}px`;
+            if (newWidth > 0 && newWidth < 600) {
+                document.documentElement.style.setProperty('--ai-section-width', `${newWidth}px`);
+            }
         } else if (currentResizer === 'bottom') {
             const newHeight = window.innerHeight - e.clientY;
             if (newHeight > 30 && newHeight < window.innerHeight * 0.8) bottomPanel.style.height = `${newHeight}px`;

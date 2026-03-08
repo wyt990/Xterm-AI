@@ -1,6 +1,6 @@
 /* AI 对话框、消息气泡和命令执行卡片 */
 .ai-section {
-    width: 350px;
+    width: var(--ai-section-width);
     background: #252526;
     border-left: 1px solid #333;
     display: flex;
@@ -9,10 +9,12 @@
     flex-shrink: 0;
     transition: width 0.2s ease;
     overflow: hidden;
+    min-width: 0;
 }
 
 .ai-section.collapsed {
     width: 0 !important;
+    min-width: 0 !important;
     border-left: none;
 }
 
