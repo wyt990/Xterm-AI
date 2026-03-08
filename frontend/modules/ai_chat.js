@@ -1,7 +1,7 @@
 /**
  * AI 助手与对话管理模块 (增强版)
  */
-import { activeTabId } from './terminal.js';
+import { store } from './store.js';
 import { api } from './api.js';
 import { notify } from './utils.js';
 
@@ -71,7 +71,7 @@ async function loadRoles() {
 
 // 获取当前激活 tab 的角色 ID
 function getCurrentRoleId() {
-    const tab = activeTabId ? window.getTab(activeTabId) : null;
+    const tab = store.activeTabId ? window.getTab(store.activeTabId) : null;
     if (tab && tab.roleId) return tab.roleId;
     return defaultRoleId;
 }
@@ -95,7 +95,7 @@ export function initAIModule() {
 
     // 角色切换：更新当前 tab 的 roleId
     roleSelect.onchange = () => {
-        const tab = activeTabId ? window.getTab(activeTabId) : null;
+        const tab = store.activeTabId ? window.getTab(store.activeTabId) : null;
         if (tab) {
             tab.roleId = parseInt(roleSelect.value);
         }
@@ -159,12 +159,12 @@ export function initAIModule() {
 
 // 核心功能：处理发送消息
 async function handleAISend() {
-    if (isAiProcessing || !aiInput.value.trim() || !activeTabId) return;
+    if (isAiProcessing || !aiInput.value.trim() || !store.activeTabId) return;
 
     const prompt = aiInput.value.trim();
     aiInput.value = '';
     
-    const tab = window.getTab(activeTabId); 
+    const tab = window.getTab(store.activeTabId); 
     if (!tab) return;
 
     appendMessage('user', prompt, tab);
@@ -511,8 +511,8 @@ function executeAICommand(command, tab) {
 
 // 清空对话
 export function clearChat() {
-    if (!activeTabId) return;
-    const tab = window.getTab(activeTabId);
+    if (!store.activeTabId) return;
+    const tab = window.getTab(store.activeTabId);
     if (tab) {
         tab.chatHistory = [];
         aiMessages.innerHTML = '';

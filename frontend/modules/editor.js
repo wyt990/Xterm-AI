@@ -2,7 +2,7 @@
  * 文本编辑器模块 - 支持目录树 + 多标签
  */
 import { api } from './api.js';
-import { activeTabId } from './terminal.js';
+import { store } from './store.js';
 import { notify, storage, showModal, closeModal } from './utils.js';
 
 // ===================== 状态 =====================
@@ -98,8 +98,8 @@ export function initEditorModule() {
 
 // ===================== 打开文件（从 SFTP 面板调用）=====================
 export async function openFileInEditor(file) {
-    if (!activeTabId) return;
-    const sshTab = window.getTab(activeTabId);
+    if (!store.activeTabId) return;
+    const sshTab = window.getTab(store.activeTabId);
     const serverId = sshTab.config.id;
     const base = sshTab.sftpCurrentPath || '/';
     const filePath = base === '/' ? `/${file.name}` : `${base}/${file.name}`;

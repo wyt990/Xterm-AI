@@ -2,7 +2,7 @@
  * 设置、角色、端点与日志管理模块
  */
 import { api } from './api.js';
-import { storage, notify, showModal, closeModal } from './utils.js';
+import { storage, notify, showModal, closeModal, setBtnLoading } from './utils.js';
 
 export function initSettingsModule() {
     // 绑定表单提交事件
@@ -83,16 +83,20 @@ export function initSettingsModule() {
 // --- 服务器操作 ---
 export async function testSSHFromModal(e) {
     e.preventDefault();
+    const btn = e.target;
     const form = document.getElementById('server-form');
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
     
+    setBtnLoading(btn, true);
     notify("正在测试 SSH 连接...", "info");
     try {
         const res = await api.testServer(data);
         notify("连接测试成功！", "success");
     } catch (err) {
         notify(`连接失败: ${err.message}`, "error");
+    } finally {
+        setBtnLoading(btn, false);
     }
 }
 
@@ -138,18 +142,22 @@ export async function loadAIEndpoints() {
 
 async function testAIFromModal(e) {
     e.preventDefault();
+    const btn = e.target;
     const form = document.getElementById('ai-form');
     const data = {
         api_key: form.api_key.value,
         base_url: form.base_url.value,
         model: form.model.value
     };
+    setBtnLoading(btn, true);
     notify("正在测试 AI 连接...", "info");
     try {
         await api.testAI(data);
         notify("AI 连接测试成功！", "success");
     } catch (err) {
         notify(`连接失败: ${err.message}`, "error");
+    } finally {
+        setBtnLoading(btn, false);
     }
 }
 
@@ -254,94 +262,141 @@ async function handleClearLogs() {
 // --- 初始化所有表单 ---
 function initForms() {
     // 服务器表单
-    document.getElementById('server-form').onsubmit = async (e) => {
-        e.preventDefault();
-        const id = document.getElementById('server-id').value;
-        const formData = new FormData(e.target);
-        const data = Object.fromEntries(formData.entries());
-        try {
-            if (id) await api.updateServer(id, data);
-            else await api.addServer(data);
-            closeModal('server-modal');
-            notify("保存服务器成功", "success");
-            // 通知 app.js 刷新列表，但 app.js 没有导出 loadServers，所以我们可以重新加载
-            // 这里我们假设 window.loadServers 是全局的，但在 app.js 中它不是
-            // 实际上为了解耦，我们可以触发一个事件
-            window.dispatchEvent(new CustomEvent('serversChanged'));
-        } catch (err) { notify("保存失败: " + err.message, "error"); }
-    };
+    const serverForm = document.getElementById('server-form');
+    if (serverForm) {
+        serverForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const id = document.getElementById('server-id').value;
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            setBtnLoading(submitBtn, true);
+            try {
+                if (id) await api.updateServer(id, data);
+                else await api.addServer(data);
+                closeModal('server-modal');
+                notify("保存服务器成功", "success");
+                window.dispatchEvent(new CustomEvent('serversChanged'));
+            } catch (err) { notify("保存失败: " + err.message, "error"); }
+            finally { setBtnLoading(submitBtn, false); }
+        };
+    }
 
     // 角色表单
-    document.getElementById('role-form').onsubmit = async (e) => {
-        e.preventDefault();
-        const id = document.getElementById('role-id').value;
-        const checkedTypes = Array.from(e.target.querySelectorAll('input[name="bound_device_types"]:checked')).map(cb => parseInt(cb.value));
-        const data = {
-            name: e.target.name.value,
-            system_prompt: e.target.system_prompt.value,
-            ai_endpoint_id: e.target.ai_endpoint_id.value || null,
-            bound_device_types: checkedTypes
+    const roleForm = document.getElementById('role-form');
+    if (roleForm) {
+        roleForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const id = document.getElementById('role-id').value;
+            const checkedTypes = Array.from(e.target.querySelectorAll('input[name="bound_device_types"]:checked')).map(cb => parseInt(cb.value));
+            const data = {
+                name: e.target.name.value,
+                system_prompt: e.target.system_prompt.value,
+                ai_endpoint_id: e.target.ai_endpoint_id.value || null,
+                bound_device_types: checkedTypes
+            };
+            
+            setBtnLoading(submitBtn, true);
+            try {
+                if (id) await api.updateRole(id, data);
+                else await api.addRole(data);
+                closeModal('role-modal');
+                notify("保存角色成功", "success");
+                loadRoles();
+                if (window.loadDeviceTypes) window.loadDeviceTypes();
+            } catch (err) { notify("保存角色失败: " + err.message, "error"); }
+            finally { setBtnLoading(submitBtn, false); }
         };
-        try {
-            if (id) await api.updateRole(id, data);
-            else await api.addRole(data);
-            closeModal('role-modal');
-            notify("保存角色成功", "success");
-            loadRoles();
-            if (window.loadDeviceTypes) window.loadDeviceTypes();
-        } catch (err) { notify("保存角色失败: " + err.message, "error"); }
-    };
+    }
 
     // AI 端点表单
-    document.getElementById('ai-form').onsubmit = async (e) => {
-        e.preventDefault();
-        const id = document.getElementById('ai-id').value;
-        const capabilities = Array.from(e.target.querySelectorAll('input[name="capabilities"]:checked')).map(cb => cb.value);
-        const data = {
-            name: e.target.name.value,
-            base_url: e.target.base_url.value,
-            api_key: e.target.api_key.value,
-            model: e.target.model.value,
-            capabilities: capabilities
+    const aiForm = document.getElementById('ai-form');
+    if (aiForm) {
+        aiForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const id = document.getElementById('ai-id').value;
+            const capabilities = Array.from(e.target.querySelectorAll('input[name="capabilities"]:checked')).map(cb => cb.value);
+            const data = {
+                name: e.target.name.value,
+                base_url: e.target.base_url.value,
+                api_key: e.target.api_key.value,
+                model: e.target.model.value,
+                capabilities: capabilities
+            };
+            
+            setBtnLoading(submitBtn, true);
+            try {
+                if (id) await api.updateAIEndpoint(id, data);
+                else await api.addAIEndpoint(data);
+                closeModal('ai-modal');
+                loadAIEndpoints();
+            } catch (err) { notify("保存端点失败: " + err.message, "error"); }
+            finally { setBtnLoading(submitBtn, false); }
         };
-        if (id) await api.updateAIEndpoint(id, data);
-        else await api.addAIEndpoint(data);
-        closeModal('ai-modal');
-        loadAIEndpoints();
-    };
+    }
 
     // 命令分组表单
-    document.getElementById('command-group-form').onsubmit = async (e) => {
-        e.preventDefault();
-        const id = document.getElementById('command-group-id').value;
-        const name = e.target.name.value;
-        if (id) await api.updateCommandGroup(id, name);
-        else await api.addCommandGroup(name);
-        closeModal('command-group-modal');
-        window.dispatchEvent(new CustomEvent('commandsChanged'));
-    };
+    const commandGroupForm = document.getElementById('command-group-form');
+    if (commandGroupForm) {
+        commandGroupForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const id = document.getElementById('command-group-id').value;
+            const name = e.target.name.value;
+            
+            setBtnLoading(submitBtn, true);
+            try {
+                if (id) await api.updateCommandGroup(id, name);
+                else await api.addCommandGroup(name);
+                closeModal('command-group-modal');
+                window.dispatchEvent(new CustomEvent('commandsChanged'));
+            } catch (err) { notify("操作失败: " + err.message, "error"); }
+            finally { setBtnLoading(submitBtn, false); }
+        };
+    }
 
     // 命令表单
-    document.getElementById('command-form').onsubmit = async (e) => {
-        e.preventDefault();
-        const id = document.getElementById('command-id').value;
-        const data = {
-            group_id: e.target.group_id.value,
-            name: e.target.name.value,
-            content: e.target.content.value,
-            auto_cr: e.target.auto_cr.checked ? 1 : 0
+    const commandForm = document.getElementById('command-form');
+    if (commandForm) {
+        commandForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const id = document.getElementById('command-id').value;
+            const data = {
+                group_id: e.target.group_id.value,
+                name: e.target.name.value,
+                content: e.target.content.value,
+                auto_cr: e.target.auto_cr.checked ? 1 : 0
+            };
+            
+            setBtnLoading(submitBtn, true);
+            try {
+                if (id) await api.updateCommand(id, data);
+                else await api.addCommand(data);
+                closeModal('command-modal');
+                window.dispatchEvent(new CustomEvent('commandsChanged'));
+            } catch (err) { notify("操作失败: " + err.message, "error"); }
+            finally { setBtnLoading(submitBtn, false); }
         };
-        if (id) await api.updateCommand(id, data);
-        else await api.addCommand(data);
-        closeModal('command-modal');
-        window.dispatchEvent(new CustomEvent('commandsChanged'));
-    };
+    }
 
     // 系统设置表单
-    document.getElementById('system-settings-form').onsubmit = async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        await api.updateSettings(Object.fromEntries(formData.entries()));
-        notify("设置已保存");
-    };
+    const sysSettingsForm = document.getElementById('system-settings-form');
+    if (sysSettingsForm) {
+        sysSettingsForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const formData = new FormData(e.target);
+            
+            setBtnLoading(submitBtn, true);
+            try {
+                await api.updateSettings(Object.fromEntries(formData.entries()));
+                notify("设置已保存", "success");
+            } catch (err) { notify("保存失败: " + err.message, "error"); }
+            finally { setBtnLoading(submitBtn, false); }
+        };
+    }
 }

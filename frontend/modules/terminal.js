@@ -3,9 +3,11 @@
  */
 import { api } from './api.js';
 import { storage, notify } from './utils.js';
+import { store } from './store.js';
 
-export let tabs = [];
-export let activeTabId = null;
+// 获取状态（快捷访问）
+const getTabs = () => (store ? store.getState('tabs') : []);
+const getActiveTabId = () => (store ? store.getState('activeTabId') : null);
 
 // 初始化标签栏与容器
 const tabBar = document.getElementById('tab-bar');
@@ -37,7 +39,8 @@ export function createTab(serverConfig) {
         }
     };
 
-    tabs.push(tab);
+    const tabs = [...getTabs(), tab];
+    store.setState('tabs', tabs);
     renderTabUI(tab);
     switchTab(tabId);
     connectTerminal(tab);
@@ -69,10 +72,11 @@ function renderTabUI(tab) {
 }
 
 export function switchTab(tabId) {
+    const tabs = getTabs();
     const tab = tabs.find(t => t.id === tabId);
     if (!tab) return;
 
-    activeTabId = tabId;
+    store.setState('activeTabId', tabId);
 
     // UI 切换
     document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
@@ -104,6 +108,7 @@ export function switchTab(tabId) {
 }
 
 export function closeTab(tabId) {
+    const tabs = [...getTabs()];
     const index = tabs.findIndex(t => t.id === tabId);
     if (index === -1) return;
 
@@ -115,12 +120,13 @@ export function closeTab(tabId) {
     document.getElementById(`container-${tabId}`).remove();
 
     tabs.splice(index, 1);
+    store.setState('tabs', tabs);
 
-    if (activeTabId === tabId) {
+    if (getActiveTabId() === tabId) {
         if (tabs.length > 0) {
             switchTab(tabs[tabs.length - 1].id);
         } else {
-            activeTabId = null;
+            store.setState('activeTabId', null);
             document.getElementById('quick-connect-page').classList.add('active');
             // 通知其他模块：所有连接已关闭，清空相关面板
             window.dispatchEvent(new CustomEvent('allTabsClosed'));
@@ -201,8 +207,9 @@ function connectTerminal(tab) {
 
 // 自适应终端尺寸（拖拽调整时使用）
 export function fitActiveTerminal() {
-    if (!activeTabId) return;
-    const tab = tabs.find(t => t.id === activeTabId);
+    const activeId = getActiveTabId();
+    if (!activeId) return;
+    const tab = getTabs().find(t => t.id === activeId);
     if (tab && tab.fitAddon) {
         tab.fitAddon.fit();
         if (tab.socket && tab.socket.readyState === WebSocket.OPEN) {
@@ -217,8 +224,9 @@ export function fitActiveTerminal() {
 
 // 从隐藏状态恢复时使用：fit + 强制重绘（解决黑屏问题）
 export function refreshActiveTerminal() {
-    if (!activeTabId) return;
-    const tab = tabs.find(t => t.id === activeTabId);
+    const activeId = getActiveTabId();
+    if (!activeId) return;
+    const tab = getTabs().find(t => t.id === activeId);
     if (!tab || !tab.fitAddon || !tab.terminal) return;
 
     tab.fitAddon.fit();

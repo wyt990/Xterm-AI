@@ -2,7 +2,7 @@
  * 实时系统指标监控模块 (增强版)
  * 包含：实时指标、历史趋势图、进程管理、性能优化
  */
-import { activeTabId } from './terminal.js';
+import { store } from './store.js';
 import { api } from './api.js';
 import { notify } from './utils.js';
 
@@ -74,7 +74,7 @@ function startStatsMonitoring(tab) {
             try {
                 const stats = JSON.parse(event.data);
                 tab.stats = stats;
-                if (activeTabId === tab.id) {
+                if (store.activeTabId === tab.id) {
                     updateStatsUI(stats, tab.config.id);
                 }
             } catch (e) {}

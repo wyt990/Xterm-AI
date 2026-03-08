@@ -82,7 +82,19 @@ export function notify(message, type = 'info') {
     setTimeout(() => toast.remove(), type === 'error' ? 4000 : 2500);
 }
 
-// 5. 本地存储包装
+// 5. 按钮 Loading 状态切换
+export function setBtnLoading(btn, isLoading) {
+    if (!btn) return;
+    if (isLoading) {
+        btn.classList.add('loading');
+        btn.disabled = true;
+    } else {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+    }
+}
+
+// 6. 本地存储包装
 export const storage = {
     get: (key, defaultValue = null) => {
         const val = localStorage.getItem(key);

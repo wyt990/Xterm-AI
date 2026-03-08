@@ -2,7 +2,7 @@
  * SFTP 文件管理器模块 (增强版)
  */
 import { api } from './api.js';
-import { activeTabId } from './terminal.js';
+import { store } from './store.js';
 import { formatSize, formatTime, notify, showModal, closeModal } from './utils.js';
 
 let currentPath = '/';
@@ -87,21 +87,22 @@ export function initSFTPModule() {
 }
 
 export async function loadFiles(path) {
-    if (!activeTabId) {
+    const activeId = store ? store.activeTabId : null;
+    if (!activeId) {
         notify('请先连接到一台服务器', 'warning');
         return;
     }
-    const tab = window.getTab(activeTabId);
+    const tab = window.getTab(activeId);
     if (!tab) return;
 
     // 记录发起请求时的 tabId
-    const requestId = activeTabId;
+    const requestId = activeId;
 
     try {
         const res = await api.sftpList(tab.config.id, path);
         
         // 如果请求回来时，标签已经切换了，则忽略结果
-        if (activeTabId !== requestId) {
+        if ((store ? store.activeTabId : null) !== requestId) {
             console.log("SFTP: 标签已切换，忽略上个标签的列表结果");
             return;
         }
@@ -123,7 +124,7 @@ export async function loadFiles(path) {
         renderFileList(files);
     } catch (err) {
         // 如果请求失败时，标签已经切换了，静默失败（避免前一个标签的报错干扰当前标签）
-        if (activeTabId !== requestId) return;
+        if ((store ? store.activeTabId : null) !== requestId) return;
         console.error("加载文件失败:", err);
     }
 }
@@ -279,8 +280,8 @@ function showContextMenu(e, isFile) {
 }
 
 async function sftpAction(type) {
-    if (!activeTabId) return;
-    const tab = window.getTab(activeTabId);
+    if (!store.activeTabId) return;
+    const tab = window.getTab(store.activeTabId);
     const serverId = tab.config.id;
     const filePath = sftpSelectedFile ? (currentPath === '/' ? `/${sftpSelectedFile.name}` : `${currentPath}/${sftpSelectedFile.name}`) : currentPath;
 
@@ -375,8 +376,8 @@ function initSftpDragAndDrop() {
 }
 
 async function uploadFiles(files) {
-    if (!activeTabId) return;
-    const tab = window.getTab(activeTabId);
+    if (!store.activeTabId) return;
+    const tab = window.getTab(store.activeTabId);
     if (!tab) return;
 
     notify(`正在上传 ${files.length} 个文件...`);
@@ -448,7 +449,7 @@ function initSftpForms() {
     if (renameForm) {
         renameForm.onsubmit = async (e) => {
             e.preventDefault();
-            const tab = window.getTab(activeTabId);
+            const tab = window.getTab(store.activeTabId);
             const oldPath = document.getElementById('sftp-rename-old-path').value;
             const newName = document.getElementById('sftp-new-name').value;
             const newPath = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) + newName;
@@ -462,7 +463,7 @@ function initSftpForms() {
     if (chmodForm) {
         chmodForm.onsubmit = async (e) => {
             e.preventDefault();
-            const tab = window.getTab(activeTabId);
+            const tab = window.getTab(store.activeTabId);
             const path = document.getElementById('sftp-chmod-path').value;
             const mode = document.getElementById('sftp-new-mode').value;
             await api.sftpChmod({ server_id: tab.config.id, path, mode });
@@ -475,7 +476,7 @@ function initSftpForms() {
     if (createForm) {
         createForm.onsubmit = async (e) => {
             e.preventDefault();
-            const tab = window.getTab(activeTabId);
+            const tab = window.getTab(store.activeTabId);
             const type = document.getElementById('sftp-create-type').value;
             const name = document.getElementById('sftp-create-name').value;
             const path = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;

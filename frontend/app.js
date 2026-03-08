@@ -9,9 +9,11 @@ import * as sftp from './modules/sftp.js';
 import * as editor from './modules/editor.js';
 import * as stats from './modules/stats.js';
 import * as settings from './modules/settings.js';
+import { store } from './modules/store.js';
+import './modules/components.js';
 
 // 全局变量维护
-window.getTab = (id) => terminal.tabs.find(t => t.id === id);
+window.getTab = (id) => (store ? store.getState('tabs') : []).find(t => t.id === id);
 window.showModal = showModal;
 window.closeModal = closeModal;
 
@@ -142,7 +144,8 @@ async function loadCommands(groupId) {
         
         window.executeCommand = (encodedContent, autoCr) => {
             const content = decodeURIComponent(escape(atob(encodedContent)));
-            const activeTab = window.getTab(terminal.activeTabId);
+            const activeId = store.getState('activeTabId');
+            const activeTab = window.getTab(activeId);
             if (!activeTab || !activeTab.socket) return notify("请先选择一个活跃的终端标签", "warning");
             activeTab.socket.send(JSON.stringify({ type: 'data', data: content + (autoCr ? '\n' : '') }));
         };
@@ -186,9 +189,10 @@ function initNavigation() {
             
             // 路由特殊处理
             if (viewId === 'terminal-view') {
-                if (terminal.tabs.length > 0) {
+                const tabs = store ? store.getState('tabs') : [];
+                if (tabs && tabs.length > 0) {
                     // 有连接：switchTab 会重新给终端容器加 active 并触发 fit+refresh
-                    const targetId = terminal.activeTabId || terminal.tabs[terminal.tabs.length - 1].id;
+                    const targetId = (store ? store.getState('activeTabId') : null) || tabs[tabs.length - 1].id;
                     terminal.switchTab(targetId);
                 } else {
                     // 无连接：恢复"最近连接"欢迎页（它的 active 也被 querySelectorAll 清掉了）
@@ -309,6 +313,7 @@ function getServerIcon(deviceType) {
         default:        return 'fas fa-server';
     }
 }
+window.getServerIcon = getServerIcon;
 
 async function loadServers() {
     try {
@@ -387,22 +392,8 @@ async function loadServers() {
                 const grid = document.createElement('div');
                 grid.className = 'server-grid';
                 node._servers.forEach(server => {
-                    const card = document.createElement('div');
-                    card.className = 'server-card';
-                    const icon = getServerIcon(server.device_type);
-                    const safeName = server.name.replace(/'/g, "\\'");
-                    card.innerHTML = `
-                        <div class="server-card-icon"><i class="${icon}"></i></div>
-                        <div class="server-card-info">
-                            <h4>${server.name}</h4>
-                            <p>${server.host}:${server.port}</p>
-                        </div>
-                        <div class="server-card-actions">
-                            <button class="btn-icon" title="编辑" onclick="event.stopPropagation(); showEditServerModal(${server.id})"><i class="fas fa-edit"></i></button>
-                            <button class="btn-icon" title="删除" onclick="event.stopPropagation(); deleteServer(${server.id}, '${safeName}')"><i class="fas fa-trash-alt"></i></button>
-                        </div>
-                    `;
-                    card.onclick = () => connectToServer(server);
+                    const card = document.createElement('server-card');
+                    card.server = server;
                     grid.appendChild(card);
                 });
                 children.appendChild(grid);
