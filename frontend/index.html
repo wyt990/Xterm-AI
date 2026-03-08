@@ -39,6 +39,10 @@
                     <i class="fas fa-user-robot"></i>
                     <span>AI 角色</span>
                 </li>
+                <li class="nav-item" data-view="skills-view">
+                    <i class="fas fa-puzzle-piece"></i>
+                    <span>技能管理</span>
+                </li>
                 <li class="nav-item" data-view="model-settings-view">
                     <i class="fas fa-brain"></i>
                     <span>模型设置</span>
@@ -272,6 +276,34 @@
                 </div>
                 <div class="settings-container" style="padding: 20px;">
                     <div id="role-list-container" class="role-grid"></div>
+                </div>
+            </div>
+
+            <!-- 技能管理视图 -->
+            <div id="skills-view" class="view">
+                <div class="view-header">
+                    <h2>技能管理</h2>
+                    <small style="color: #888; font-weight: normal; margin-left: 8px;">支持从商店安装、翻译为中文；离线/内网时可手动填写描述</small>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="skill-filter-device" style="padding: 6px 10px; background: #2d2d2d; border: 1px solid #3c3c3c; border-radius: 4px; color: #ccc;">
+                            <option value="">全部设备类型</option>
+                        </select>
+                        <select id="skill-filter-enabled" style="padding: 6px 10px; background: #2d2d2d; border: 1px solid #3c3c3c; border-radius: 4px; color: #ccc;">
+                            <option value="">全部状态</option>
+                            <option value="1">已启用</option>
+                            <option value="0">已禁用</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="loadSkills()" title="刷新"><i class="fas fa-sync-alt"></i></button>
+                        <button class="btn btn-secondary" onclick="showSkillStoreModal()">
+                            <i class="fas fa-store"></i> 从商店安装
+                        </button>
+                        <button class="btn btn-primary" onclick="showAddSkillModal()">
+                            <i class="fas fa-plus"></i> 创建技能
+                        </button>
+                    </div>
+                </div>
+                <div class="settings-container" style="padding: 20px;">
+                    <div id="skill-list-container" class="role-grid"></div>
                 </div>
             </div>
 

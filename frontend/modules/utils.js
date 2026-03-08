@@ -12,7 +12,8 @@ export async function loadComponents() {
         'sftp_modals.html',
         'editor_modals.html',
         'system_modals.html',
-        'device_type_modals.html'
+        'device_type_modals.html',
+        'skill_modals.html'
     ];
     
     const placeholder = document.getElementById('component-placeholder');

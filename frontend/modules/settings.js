@@ -71,13 +71,398 @@ export function initSettingsModule() {
         showModal('command-modal');
     };
     
+    // 技能管理
+    window.showAddSkillModal = showAddSkillModal;
+    window.showSkillStoreModal = showSkillStoreModal;
+    window.translateSkillDescription = translateSkillDescription;
+    window.loadSkills = loadSkills;
+
     // 角色与 AI 列表中的操作按钮需要全局访问
-    window.editAI = (id) => { /* 逻辑已在 loadAIEndpoints 中动态绑定，但为了安全这里也可以定义 */ };
+    window.editAI = (id) => { /* 逻辑已在 loadAIEndpoints 中动态绑定 */ };
     window.setActiveAI = async (id) => { await api.setActiveAI(id); loadAIEndpoints(); };
     window.deleteAI = async (id) => { if(confirm('确定删除?')){ await api.deleteAIEndpoint(id); loadAIEndpoints(); }};
     window.editRole = (id) => { /* 逻辑已在 loadRoles 中动态绑定 */ };
     window.setActiveRole = async (id) => { await api.setActiveRole(id); loadRoles(); };
     window.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id); loadRoles(); }};
+}
+
+// --- 技能管理 ---
+async function showAddSkillModal() {
+    document.getElementById('skill-modal-title').innerText = '创建技能';
+    document.getElementById('skill-form').reset();
+    document.getElementById('skill-id').value = '';
+    const nameInput = document.querySelector('#skill-form input[name="name"]');
+    if (nameInput) nameInput.readOnly = false;
+    const descZhInput = document.querySelector('#skill-form input[name="description_zh"]');
+    if (descZhInput) descZhInput.value = '';
+    await loadSkillDeviceTypeCheckboxes(null);
+    showModal('skill-modal');
+}
+
+async function translateSkillDescription() {
+    const form = document.getElementById('skill-form');
+    const descInput = form?.querySelector('input[name="description"]');
+    const descZhInput = form?.querySelector('input[name="description_zh"]');
+    const btn = document.getElementById('skill-translate-btn');
+    if (!descInput || !descZhInput) return;
+    const text = descInput.value.trim();
+    if (!text) return notify('请先填写英文描述', 'warning');
+    setBtnLoading(btn, true);
+    try {
+        const res = await api.translate(text);
+        if (res.translation) {
+            descZhInput.value = res.translation;
+            notify('翻译完成', 'success');
+        } else {
+            notify(res.message || '翻译失败', 'info');
+        }
+    } catch (err) {
+        notify('翻译服务暂不可用（离线/内网），请手动填写', 'info');
+    } finally {
+        setBtnLoading(btn, false);
+    }
+}
+
+export async function loadSkills() {
+    const filterDevice = document.getElementById('skill-filter-device')?.value || '';
+    const filterEnabled = document.getElementById('skill-filter-enabled')?.value || '';
+    const params = {};
+    if (filterDevice) params.device_type_id = parseInt(filterDevice);
+    if (filterEnabled !== '') params.enabled = parseInt(filterEnabled);
+
+    try {
+        const skills = await api.getSkills(params);
+        const container = document.getElementById('skill-list-container');
+        if (!container) return;
+
+        if (skills.length === 0) {
+            container.innerHTML = `
+                <div class="empty-tip" style="grid-column: 1/-1; padding: 40px; text-align: center; color: #888;">
+                    <i class="fas fa-puzzle-piece" style="font-size: 2rem; margin-bottom: 12px; display: block;"></i>
+                    <p>暂无技能，点击「从商店安装」或「创建技能」添加</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = skills.map(s => {
+            const desc = (s.description_zh || s.description || '').substring(0, 80);
+            const typeLabels = (s.bound_device_type_ids || []).map(id => {
+                const t = window.allDeviceTypes?.find(d => d.id === id);
+                return t ? t.name : '';
+            }).filter(Boolean).join('、') || '未绑定';
+            const isRemote = (s.source || 'local') !== 'local';
+            return `
+            <div class="role-card ${s.is_enabled ? 'active' : ''}" data-skill-id="${s.id}">
+                <div class="role-card-header">
+                    <h3>${s.display_name || s.name}</h3>
+                    ${s.is_enabled ? '<span class="badge">启用</span>' : '<span class="badge" style="background:#555">禁用</span>'}
+                </div>
+                <div class="role-card-body">
+                    <small style="color:#888;">${s.name}</small>
+                    <p style="margin: 8px 0 0;">${desc || '(无描述)'}${desc && desc.length >= 80 ? '...' : ''}</p>
+                    <p style="margin: 8px 0 0; font-size: 11px; color: #666;">适用: ${typeLabels}</p>
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-sm btn-secondary" onclick="editSkill(${s.id})">编辑</button>
+                    <button class="btn btn-sm ${s.is_enabled ? 'btn-secondary' : 'btn-primary'}" onclick="toggleSkill(${s.id})">${s.is_enabled ? '禁用' : '启用'}</button>
+                    ${isRemote ? `<button class="btn btn-sm btn-secondary" onclick="refreshSkill(${s.id})" title="从源刷新">刷新</button>` : ''}
+                    <button class="btn btn-sm btn-danger" onclick="deleteSkill(${s.id}, '${(s.display_name || s.name).replace(/'/g, "\\'")}')">删除</button>
+                </div>
+            </div>
+            `;
+        }).join('');
+
+        window.editSkill = async (id) => {
+            const skill = skills.find(s => s.id === id);
+            if (!skill) return;
+            document.getElementById('skill-modal-title').innerText = '编辑技能';
+            document.getElementById('skill-id').value = skill.id;
+            const form = document.getElementById('skill-form');
+            form.name.value = skill.name;
+            const nameInput = form.querySelector('input[name="name"]');
+            if (nameInput) nameInput.readOnly = true;
+            form.display_name.value = skill.display_name || '';
+            form.description.value = skill.description || '';
+            form.description_zh.value = skill.description_zh || '';
+            form.content.value = skill.content || '';
+            form.is_enabled.checked = !!skill.is_enabled;
+            await loadSkillDeviceTypeCheckboxes(skill.bound_device_type_ids || []);
+            showModal('skill-modal');
+        };
+        window.toggleSkill = async (id) => {
+            try {
+                const res = await api.toggleSkill(id);
+                notify(res.is_enabled ? '已启用' : '已禁用', 'success');
+                loadSkills();
+            } catch (err) { notify('操作失败: ' + err.message, 'error'); }
+        };
+        window.refreshSkill = async (id) => {
+            try {
+                await api.refreshSkill(id);
+                notify('已从远程更新技能内容', 'success');
+                loadSkills();
+            } catch (err) { notify('刷新失败: ' + err.message, 'error'); }
+        };
+        window.deleteSkill = async (id, name) => {
+            if (!confirm(`确定要删除技能「${name}」吗？`)) return;
+            try {
+                await api.deleteSkill(id);
+                notify('已删除', 'success');
+                loadSkills();
+            } catch (err) { notify('删除失败: ' + err.message, 'error'); }
+        };
+    } catch (err) {
+        notify('加载技能失败: ' + err.message, 'error');
+    }
+}
+
+async function loadSkillDeviceTypeCheckboxes(checkedIds = []) {
+    const container = document.getElementById('skill-device-type-list');
+    if (!container) return;
+    try {
+        const types = await api.getDeviceTypes();
+        const checkedSet = new Set(Array.isArray(checkedIds) && checkedIds.length ? checkedIds : []);
+        container.innerHTML = types.map(t => `
+            <label class="checkbox-label" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: #2d2d2d; border-radius: 3px; cursor: pointer;">
+                <input type="checkbox" name="bound_device_types" value="${t.id}" ${checkedSet.has(t.id) ? 'checked' : ''} style="margin: 0;">
+                <span style="font-size: 12px;">${t.name}</span>
+            </label>
+        `).join('');
+    } catch (err) { console.error('加载设备类型失败', err); }
+}
+
+// --- 技能商店 ---
+let skillStorePendingInstall = null;
+
+async function showSkillStoreModal() {
+    skillStorePendingInstall = null;
+    document.getElementById('skill-store-install-panel').style.display = 'none';
+    document.querySelectorAll('.skill-store-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === 'recommended');
+        t.style.color = t.dataset.tab === 'recommended' ? '#ccc' : '#888';
+        t.style.borderBottomColor = t.dataset.tab === 'recommended' ? '#0078d4' : 'transparent';
+    });
+    document.getElementById('skill-store-recommended').style.display = 'block';
+    document.getElementById('skill-store-github').style.display = 'none';
+    document.getElementById('skill-store-query').value = '';
+    document.getElementById('skill-store-repo').value = '';
+    document.getElementById('skill-store-token').value = '';
+    document.getElementById('skill-store-github-list').innerHTML = '';
+    await loadRecommendedSkills('');
+    document.getElementById('skill-store-query').oninput = () => loadRecommendedSkills(document.getElementById('skill-store-query').value);
+    document.querySelectorAll('.skill-store-tab').forEach(t => {
+        t.onclick = () => {
+            document.querySelectorAll('.skill-store-tab').forEach(x => {
+                x.classList.toggle('active', x.dataset.tab === t.dataset.tab);
+                x.style.color = x.dataset.tab === t.dataset.tab ? '#ccc' : '#888';
+                x.style.borderBottomColor = x.dataset.tab === t.dataset.tab ? '#0078d4' : 'transparent';
+            });
+            document.getElementById('skill-store-recommended').style.display = t.dataset.tab === 'recommended' ? 'block' : 'none';
+            document.getElementById('skill-store-github').style.display = t.dataset.tab === 'github' ? 'block' : 'none';
+        };
+    });
+    showModal('skill-store-modal');
+}
+
+const DEVICE_TYPE_LABELS = { linux: 'Linux', windows: 'Windows', h3c: 'H3C', huawei: '华为', cisco: '思科', ruijie: '锐捷', other: '其它' };
+function formatDeviceTypeLabels(values) {
+    if (!values || !Array.isArray(values)) return '';
+    return values.map(v => DEVICE_TYPE_LABELS[v] || v).filter(Boolean).join('、');
+}
+
+async function loadRecommendedSkills(query) {
+    const container = document.getElementById('skill-store-recommended-list');
+    if (!container) return;
+    try {
+        const [skills, installedList] = await Promise.all([
+            api.getRecommendedSkills(query),
+            api.getSkills({})
+        ]);
+        const installedNames = new Set((installedList || []).map(s => (s.name || '').toLowerCase()));
+        if (skills.length === 0) {
+            container.innerHTML = '<div class="empty-tip" style="grid-column: 1/-1; padding: 24px; color: #888; text-align: center;">暂无推荐技能</div>';
+            return;
+        }
+        container.innerHTML = skills.map(s => {
+            const deviceLabels = formatDeviceTypeLabels(s.device_type_values);
+            const isInstalled = installedNames.has((s.name || '').toLowerCase());
+            return `
+            <div class="role-card" style="cursor: pointer;${isInstalled ? ' opacity: 0.85;' : ''}"
+                data-skill-source="${(s.source || '').replace(/"/g, '&quot;')}"
+                data-skill-name="${(s.name || '').replace(/"/g, '&quot;')}"
+                data-skill-path="${(s.skill_path || '.agent-skills').replace(/"/g, '&quot;')}"
+                data-skill-description="${(s.description || '').replace(/"/g, '&quot;')}"
+                data-skill-desc-zh="${(s.description_zh || '').replace(/"/g, '&quot;')}"
+                data-skill-device-values="${(s.device_type_values || []).join(',')}">
+                <div class="role-card-header"><h3>${(s.display_name || s.name)}</h3>${isInstalled ? '<span class="badge" style="background:#28a745; margin-left:6px;">已安装</span>' : ''}</div>
+                <div class="role-card-body">
+                    <small style="color:#888;">${s.name}</small>
+                    <p style="margin: 8px 0 0; font-size: 12px;">${(s.description_zh || s.description || '(无描述)').substring(0, 100)}...</p>
+                    ${deviceLabels ? `<p style="margin: 6px 0 0; font-size: 11px; color: #0078d4;"><i class="fas fa-server"></i> 适用: ${deviceLabels}</p>` : ''}
+                </div>
+                <div class="card-actions">
+                    ${isInstalled ? '<button class="btn btn-sm btn-secondary" disabled><i class="fas fa-check"></i> 已安装</button>' : '<button class="btn btn-sm btn-primary" onclick="skillStoreSelectInstall(event, this)">安装</button>'}
+                </div>
+            </div>
+        `}).join('');
+    } catch (err) {
+        container.innerHTML = '<div class="empty-tip" style="grid-column: 1/-1; padding: 24px; color: #e74c3c;">加载失败: ' + err.message + '</div>';
+    }
+}
+
+async function loadSkillsFromRepo() {
+    const repo = document.getElementById('skill-store-repo').value.trim();
+    const token = document.getElementById('skill-store-token').value.trim() || undefined;
+    const container = document.getElementById('skill-store-github-list');
+    if (!repo) return notify('请输入仓库地址', 'warning');
+    container.innerHTML = '<div style="padding: 24px; color: #888;">正在列出技能...</div>';
+    try {
+        const skills = await api.listSkillsFromRepo(repo, token);
+        if (skills.length === 0) {
+            container.innerHTML = '<div class="empty-tip" style="grid-column: 1/-1; padding: 24px; color: #888;">未找到技能目录（.agent-skills、skills 等）</div>';
+            return;
+        }
+        container.innerHTML = skills.map(s => `
+            <div class="role-card"
+                data-skill-source="${(s.source || '').replace(/"/g, '&quot;')}"
+                data-skill-name="${(s.name || '').replace(/"/g, '&quot;')}"
+                data-skill-path="${(s.skill_path || '.agent-skills').replace(/"/g, '&quot;')}"
+                data-skill-description="${(s.description || '').replace(/"/g, '&quot;')}"
+                data-skill-desc-zh="${(s.description_zh || '').replace(/"/g, '&quot;')}"
+                data-skill-device-values="">
+                <div class="role-card-header"><h3>${s.name}</h3></div>
+                <div class="role-card-body">
+                    <small style="color:#888;">${s.source} / ${s.skill_path || '.agent-skills'}</small>
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-sm btn-primary" onclick="skillStoreSelectInstall(event, this)">安装</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (err) {
+        container.innerHTML = '<div class="empty-tip" style="grid-column: 1/-1; padding: 24px; color: #e74c3c;">加载失败: ' + err.message + '</div>';
+    }
+}
+
+window.loadSkillsFromRepo = loadSkillsFromRepo;
+window.skillStoreSelectInstall = skillStoreSelectInstall;
+
+function skillStoreSelectInstall(ev, btn, skillData) {
+    let data = skillData;
+    if (!data) {
+        const card = btn.closest('.role-card');
+        if (!card) return;
+        if (card.dataset.skillSource !== undefined) {
+            const dv = card.dataset.skillDeviceValues || '';
+            data = {
+                source: card.dataset.skillSource || '',
+                name: card.dataset.skillName || '',
+                skill_path: card.dataset.skillPath || '.agent-skills',
+                description: card.dataset.skillDescription || '',
+                description_zh: card.dataset.skillDescZh || '',
+                device_type_values: dv ? dv.split(',').filter(Boolean) : []
+            };
+        }
+    }
+    if (!data || !data.name) return;
+    skillStorePendingInstall = {
+        source: data.source || data.repo || '',
+        skill_name: data.name,
+        skill_path: data.skill_path || '.agent-skills',
+        description_zh: data.description_zh || data.description || '',
+        description: data.description || '',
+        device_type_values: data.device_type_values || []
+    };
+    document.getElementById('skill-store-install-panel').style.display = 'block';
+    const descZhGroup = document.getElementById('skill-store-desc-zh-group');
+    const descZhInput = document.getElementById('skill-store-desc-zh');
+    if (descZhGroup && descZhInput) {
+        descZhInput.value = skillStorePendingInstall.description_zh || '';
+        descZhGroup.style.display = 'block';
+    }
+    loadSkillStoreDeviceTypes(skillStorePendingInstall.device_type_values);
+}
+
+async function loadSkillStoreDeviceTypes(recommendedValues = []) {
+    const container = document.getElementById('skill-store-device-types');
+    if (!container) return;
+    try {
+        const types = await api.getDeviceTypes();
+        const recommendSet = new Set((recommendedValues || []).map(v => String(v).toLowerCase()));
+        container.innerHTML = types.map(t => {
+            const isRecommended = recommendSet.has((t.value || '').toLowerCase());
+            return `
+            <label class="checkbox-label" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: #2d2d2d; border-radius: 3px; cursor: pointer;">
+                <input type="checkbox" class="skill-store-dt" value="${t.id}" ${isRecommended ? 'checked' : ''} style="margin: 0;">
+                <span style="font-size: 12px;">${t.name}</span>
+            </label>
+        `}).join('');
+    } catch (err) { console.error(err); }
+}
+
+window.skillStoreCancelInstall = function() {
+    skillStorePendingInstall = null;
+    document.getElementById('skill-store-install-panel').style.display = 'none';
+};
+
+window.translateStoreSkillDescription = async function() {
+    if (!skillStorePendingInstall?.description) return notify('该技能无英文描述可翻译', 'info');
+    const descZhInput = document.getElementById('skill-store-desc-zh');
+    if (!descZhInput) return;
+    try {
+        const res = await api.translate(skillStorePendingInstall.description);
+        if (res.translation) {
+            descZhInput.value = res.translation;
+            skillStorePendingInstall.description_zh = res.translation;
+            notify('翻译完成', 'success');
+        } else {
+            notify(res.message || '翻译失败', 'info');
+        }
+    } catch (err) {
+        notify('翻译服务暂不可用（离线/内网），可安装后手动编辑', 'info');
+    }
+};
+
+window.skillStoreDoInstall = async function() {
+    if (!skillStorePendingInstall) return;
+    const descZhInput = document.getElementById('skill-store-desc-zh');
+    const descZh = descZhInput?.value?.trim() || skillStorePendingInstall.description_zh || null;
+    const checked = Array.from(document.querySelectorAll('.skill-store-dt:checked')).map(c => parseInt(c.value));
+    const btn = document.getElementById('skill-store-install-btn');
+    setBtnLoading(btn, true);
+    try {
+        await api.installSkillFromStore({
+            source: skillStorePendingInstall.source,
+            skill_name: skillStorePendingInstall.skill_name,
+            skill_path: skillStorePendingInstall.skill_path,
+            description_zh: descZh,
+            bound_device_type_ids: checked
+        });
+        notify('安装成功', 'success');
+        skillStoreCancelInstall();
+        closeModal('skill-store-modal');
+        loadSkills();
+    } catch (err) {
+        notify('安装失败: ' + err.message, 'error');
+    } finally {
+        setBtnLoading(btn, false);
+    }
+};
+
+export async function initSkillFilters() {
+    const deviceSelect = document.getElementById('skill-filter-device');
+    const enabledSelect = document.getElementById('skill-filter-enabled');
+    if (!deviceSelect) return;
+    try {
+        const types = await api.getDeviceTypes();
+        window.allDeviceTypes = types;
+        const currentVal = deviceSelect.value;
+        deviceSelect.innerHTML = '<option value="">全部设备类型</option>' + types.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+        if (currentVal) deviceSelect.value = currentVal;
+        deviceSelect.onchange = () => loadSkills();
+        if (enabledSelect) enabledSelect.onchange = () => loadSkills();
+    } catch (err) { console.error('加载设备类型失败', err); }
 }
 
 // --- 服务器操作 ---
@@ -381,6 +766,35 @@ function initForms() {
             } catch (err) { notify("操作失败: " + err.message, "error"); }
             finally { setBtnLoading(submitBtn, false); }
         };
+    }
+
+    // 技能表单
+    const skillForm = document.getElementById('skill-form');
+    if (skillForm) {
+        skillForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const id = document.getElementById('skill-id').value;
+            const checkedTypes = Array.from(e.target.querySelectorAll('input[name="bound_device_types"]:checked')).map(cb => parseInt(cb.value));
+            const data = {
+                name: e.target.name.value,
+                display_name: e.target.display_name.value || null,
+                description: e.target.description.value || null,
+                description_zh: e.target.description_zh?.value || null,
+                content: e.target.content.value || null,
+                is_enabled: e.target.is_enabled.checked ? 1 : 0,
+                bound_device_types: checkedTypes
+            };
+            setBtnLoading(submitBtn, true);
+            try {
+                if (id) await api.updateSkill(id, data);
+                else await api.addSkill(data);
+                closeModal('skill-modal');
+                notify('保存技能成功', 'success');
+                loadSkills();
+            } catch (err) { notify('保存失败: ' + err.message, 'error'); }
+            finally { setBtnLoading(submitBtn, false); }
+            };
     }
 
     // 系统设置表单

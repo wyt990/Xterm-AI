@@ -130,6 +130,38 @@ class Database:
                 )
             ''')
             
+            # 9. 技能表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS skills (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    display_name TEXT,
+                    description TEXT,
+                    description_zh TEXT,
+                    source TEXT DEFAULT 'local',
+                    source_url TEXT,
+                    content TEXT,
+                    trigger_words TEXT,
+                    is_enabled INTEGER DEFAULT 1,
+                    install_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_fetched_at TIMESTAMP
+                )
+            ''')
+            
+            # 10. 技能-设备类型关联表 (多对多)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS skill_device_types (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    skill_id INTEGER NOT NULL,
+                    device_type_id INTEGER NOT NULL,
+                    FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+                    FOREIGN KEY (device_type_id) REFERENCES device_types(id) ON DELETE CASCADE,
+                    UNIQUE(skill_id, device_type_id)
+                )
+            ''')
+            
             # 初始化默认设备类型
             cursor.execute('SELECT count(*) FROM device_types')
             if cursor.fetchone()[0] == 0:
@@ -143,6 +175,12 @@ class Database:
                     ('其它', 'other', 'fas fa-microchip', None)
                 ]
                 cursor.executemany('INSERT INTO device_types (name, value, icon, role_id) VALUES (?, ?, ?, ?)', types)
+
+            # 自动迁移：skills 表增加 skill_path（技能商店远程刷新用）
+            cursor.execute("PRAGMA table_info(skills)")
+            skill_cols = [c[1] for c in cursor.fetchall()]
+            if 'skill_path' not in skill_cols:
+                cursor.execute("ALTER TABLE skills ADD COLUMN skill_path TEXT DEFAULT '.agent-skills'")
 
             # 自动迁移：servers 表增加 device_type_id
             cursor.execute("PRAGMA table_info(servers)")
@@ -161,7 +199,8 @@ class Database:
                 "log_path": "../logs",
                 "log_max_size": "10",
                 "log_backup_count": "10",
-                "log_level": "INFO"
+                "log_level": "INFO",
+                "skills_enabled": "1"
             }
             for k, v in default_settings.items():
                 cursor.execute('INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)', (k, v))
@@ -580,3 +619,154 @@ class Database:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM server_stats_history WHERE timestamp < datetime('now', ?)", (f'-{days} days',))
             conn.commit()
+
+    # --- 技能相关操作 ---
+    def get_all_skills(self, enabled_only=False, device_type_id=None):
+        """获取所有技能，支持按启用状态、设备类型过滤"""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            if device_type_id is not None:
+                cursor.execute('''
+                    SELECT DISTINCT s.* FROM skills s
+                    INNER JOIN skill_device_types sdt ON s.id = sdt.skill_id
+                    WHERE sdt.device_type_id = ?
+                    {enabled_filter}
+                    ORDER BY s.created_at DESC
+                '''.format(enabled_filter='AND s.is_enabled = 1' if enabled_only else ''), (device_type_id,))
+            else:
+                if enabled_only:
+                    cursor.execute('SELECT * FROM skills WHERE is_enabled = 1 ORDER BY created_at DESC')
+                else:
+                    cursor.execute('SELECT * FROM skills ORDER BY created_at DESC')
+            rows = cursor.fetchall()
+            result = [dict(row) for row in rows]
+            for r in result:
+                r['bound_device_type_ids'] = self._get_skill_device_type_ids(r['id'])
+            return result
+
+    def _get_skill_device_type_ids(self, skill_id):
+        """获取技能绑定的设备类型 ID 列表"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT device_type_id FROM skill_device_types WHERE skill_id = ?', (skill_id,))
+            return [row[0] for row in cursor.fetchall()]
+
+    def get_skill_by_id(self, skill_id):
+        """获取单个技能详情"""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM skills WHERE id = ?', (skill_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            result = dict(row)
+            result['bound_device_type_ids'] = self._get_skill_device_type_ids(skill_id)
+            return result
+
+    def get_skill_by_name(self, name):
+        """按 name 查找技能"""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM skills WHERE name = ?', (name,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def add_skill(self, data):
+        """创建技能"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            trigger_words = json.dumps(data.get('trigger_words') or []) if isinstance(data.get('trigger_words'), list) else data.get('trigger_words')
+            cursor.execute('''
+                INSERT INTO skills (name, display_name, description, description_zh, source, source_url, skill_path, content, trigger_words, is_enabled, install_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                data['name'],
+                data.get('display_name') or data['name'],
+                data.get('description') or '',
+                data.get('description_zh'),
+                data.get('source', 'local'),
+                data.get('source_url'),
+                data.get('skill_path') or '.agent-skills',
+                data.get('content') or '',
+                trigger_words,
+                data.get('is_enabled', 1),
+                data.get('install_count', 0)
+            ))
+            skill_id = cursor.lastrowid
+            conn.commit()
+            return skill_id
+
+    def update_skill(self, skill_id, data):
+        """更新技能"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            trigger_words = data.get('trigger_words')
+            if isinstance(trigger_words, list):
+                trigger_words = json.dumps(trigger_words)
+            cursor.execute('''
+                UPDATE skills SET
+                    name=?, display_name=?, description=?, description_zh=?, source=?, source_url=?,
+                    skill_path=?, content=?, trigger_words=?, is_enabled=?, install_count=?,
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            ''', (
+                data.get('name'),
+                data.get('display_name'),
+                data.get('description'),
+                data.get('description_zh'),
+                data.get('source'),
+                data.get('source_url'),
+                data.get('skill_path') or '.agent-skills',
+                data.get('content'),
+                trigger_words,
+                data.get('is_enabled', 1),
+                data.get('install_count', 0),
+                skill_id
+            ))
+            conn.commit()
+
+    def delete_skill(self, skill_id):
+        """删除技能（级联删除 skill_device_types）"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM skill_device_types WHERE skill_id = ?', (skill_id,))
+            cursor.execute('DELETE FROM skills WHERE id = ?', (skill_id,))
+            conn.commit()
+
+    def toggle_skill(self, skill_id):
+        """切换技能启用/禁用状态"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE skills SET is_enabled = 1 - is_enabled, updated_at=CURRENT_TIMESTAMP WHERE id = ?', (skill_id,))
+            conn.commit()
+            cursor.execute('SELECT is_enabled FROM skills WHERE id = ?', (skill_id,))
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def update_skill_device_type_bindings(self, skill_id, device_type_ids):
+        """更新技能与设备类型的绑定关系"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM skill_device_types WHERE skill_id = ?', (skill_id,))
+            if device_type_ids:
+                for dt_id in device_type_ids:
+                    cursor.execute('INSERT OR IGNORE INTO skill_device_types (skill_id, device_type_id) VALUES (?, ?)', (skill_id, dt_id))
+            conn.commit()
+
+    def get_skills_for_device_type(self, device_type_value, enabled_only=True):
+        """根据设备类型 value 获取应注入的技能列表（供 AI 使用）"""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT s.id, s.name, s.display_name, s.content
+                FROM skills s
+                INNER JOIN skill_device_types sdt ON s.id = sdt.skill_id
+                INNER JOIN device_types dt ON sdt.device_type_id = dt.id
+                WHERE dt.value = ? AND (? = 0 OR s.is_enabled = 1)
+                ORDER BY s.created_at ASC
+            ''', (device_type_value, 0 if not enabled_only else 1))
+            return [dict(row) for row in cursor.fetchall()]

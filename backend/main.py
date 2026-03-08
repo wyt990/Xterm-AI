@@ -1,6 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Depends, status, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Optional
@@ -18,6 +18,13 @@ from ssh_handler import SSHHandler
 from ai_handler import AIHandler
 from database import Database
 from logger import app_logger
+from skill_store import (
+    get_recommended_skills,
+    list_skills_from_github,
+    fetch_skill_content,
+    install_skill as do_install_skill,
+)
+from translation import translate_to_chinese as do_translate
 
 # 加载配置
 load_dotenv(dotenv_path="../.env")
@@ -28,6 +35,14 @@ APP_PASSWORD = os.getenv("APP_PASSWORD", "admin")
 
 app = FastAPI()
 security = HTTPBearer()
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """确保异常统一返回 JSON，避免前端解析 HTML 失败"""
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    app_logger.info("系统", f"未捕获异常: {exc}")
+    return JSONResponse(status_code=500, content={"detail": str(exc) or "服务器内部错误"})
 
 # --- 鉴权工具 ---
 def create_access_token():
@@ -429,6 +444,150 @@ async def delete_device_type(type_id: int):
     db.delete_device_type(type_id)
     return {"status": "success"}
 
+# --- 技能管理 API ---
+class SkillModel(BaseModel):
+    name: str
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    description_zh: Optional[str] = None
+    source: str = "local"
+    source_url: Optional[str] = None
+    content: Optional[str] = None
+    trigger_words: Optional[List[str]] = None
+    is_enabled: int = 1
+    install_count: int = 0
+    bound_device_types: List[int] = []
+
+@app.get("/api/skills", dependencies=[Depends(verify_token)])
+async def list_skills(enabled: Optional[int] = None, device_type_id: Optional[int] = None):
+    """获取技能列表，支持 ?enabled=1 和 ?device_type_id=3 过滤"""
+    enabled_only = enabled == 1 if enabled is not None else False
+    return db.get_all_skills(enabled_only=enabled_only, device_type_id=device_type_id)
+
+@app.get("/api/skills/{skill_id}", dependencies=[Depends(verify_token)])
+async def get_skill(skill_id: int):
+    skill = db.get_skill_by_id(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return skill
+
+@app.post("/api/skills", dependencies=[Depends(verify_token)])
+async def add_skill(skill: SkillModel):
+    data = skill.model_dump()
+    bound_types = data.pop("bound_device_types", [])
+    # 检查 name 唯一性
+    if db.get_skill_by_name(data["name"]):
+        raise HTTPException(status_code=400, detail=f"技能名称 '{data['name']}' 已存在")
+    skill_id = db.add_skill(data)
+    if bound_types:
+        db.update_skill_device_type_bindings(skill_id, bound_types)
+    app_logger.info("技能管理", f"创建技能: {data['name']}")
+    return {"id": skill_id, "status": "success"}
+
+@app.put("/api/skills/{skill_id}", dependencies=[Depends(verify_token)])
+async def update_skill(skill_id: int, skill: SkillModel):
+    if not db.get_skill_by_id(skill_id):
+        raise HTTPException(status_code=404, detail="Skill not found")
+    data = skill.model_dump()
+    bound_types = data.pop("bound_device_types", [])
+    # 若修改了 name，检查唯一性（排除自身）
+    existing = db.get_skill_by_name(data["name"])
+    if existing and existing["id"] != skill_id:
+        raise HTTPException(status_code=400, detail=f"技能名称 '{data['name']}' 已存在")
+    db.update_skill(skill_id, data)
+    db.update_skill_device_type_bindings(skill_id, bound_types)
+    app_logger.info("技能管理", f"更新技能 ID:{skill_id}")
+    return {"status": "success"}
+
+@app.delete("/api/skills/{skill_id}", dependencies=[Depends(verify_token)])
+async def delete_skill(skill_id: int):
+    if not db.get_skill_by_id(skill_id):
+        raise HTTPException(status_code=404, detail="Skill not found")
+    db.delete_skill(skill_id)
+    app_logger.info("技能管理", f"删除技能 ID:{skill_id}")
+    return {"status": "success"}
+
+@app.post("/api/skills/{skill_id}/toggle", dependencies=[Depends(verify_token)])
+async def toggle_skill(skill_id: int):
+    """切换技能启用/禁用状态"""
+    if not db.get_skill_by_id(skill_id):
+        raise HTTPException(status_code=404, detail="Skill not found")
+    is_enabled = db.toggle_skill(skill_id)
+    return {"is_enabled": is_enabled, "status": "success"}
+
+# --- 技能商店 API ---
+@app.get("/api/skill_store/recommended", dependencies=[Depends(verify_token)])
+async def skill_store_recommended(q: Optional[str] = ""):
+    """获取推荐技能列表"""
+    return get_recommended_skills(query=q or "")
+
+@app.get("/api/skill_store/list", dependencies=[Depends(verify_token)])
+async def skill_store_list(repo: str, token: Optional[str] = None):
+    """从 GitHub 仓库列出技能"""
+    skills = list_skills_from_github(repo, token=token)
+    return skills
+
+class SkillInstallModel(BaseModel):
+    source: str
+    skill_name: str
+    skill_path: str = ".agent-skills"
+    description_zh: Optional[str] = None
+    bound_device_type_ids: List[int] = []
+
+@app.post("/api/skill_store/install", dependencies=[Depends(verify_token)])
+async def skill_store_install(install: SkillInstallModel):
+    """安装技能（从 GitHub 拉取并写入数据库）"""
+    skill_id = do_install_skill(
+        source=install.source,
+        skill_name=install.skill_name,
+        skill_path=install.skill_path,
+        description_zh=install.description_zh,
+        bound_device_type_ids=install.bound_device_type_ids,
+        db=db,
+    )
+    if skill_id is None:
+        raise HTTPException(status_code=502, detail="安装失败：无法拉取技能内容，请检查源地址或网络")
+    app_logger.info("技能管理", f"从商店安装技能: {install.skill_name}")
+    return {"id": skill_id, "status": "success"}
+
+class TranslateModel(BaseModel):
+    text: str
+
+@app.post("/api/translate", dependencies=[Depends(verify_token)])
+async def translate_text(model: TranslateModel):
+    """将英文技能描述翻译为中文。优先预置词汇，其次 AI（若已配置）。离线时返回提示。"""
+    ai_handler = None
+    ai = db.get_active_ai_endpoint()
+    if ai:
+        ai_handler = AIHandler(ai["api_key"], ai["base_url"], ai["model"], "")
+    translation, message = await do_translate(model.text, ai_handler)
+    if translation:
+        return {"translation": translation}
+    return {"translation": None, "message": message}
+
+@app.post("/api/skills/{skill_id}/refresh", dependencies=[Depends(verify_token)])
+async def refresh_skill(skill_id: int):
+    """从 source_url 重新拉取 content（远程技能）"""
+    skill = db.get_skill_by_id(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    source_url = skill.get("source_url")
+    if not source_url:
+        raise HTTPException(status_code=400, detail="该技能为本地创建，无远程源可刷新")
+    # 解析 source_url (owner/repo 或 owner/repo/branch)
+    parts = source_url.split("/")
+    if len(parts) < 2:
+        raise HTTPException(status_code=400, detail="无效的远程源格式")
+    skill_name = skill.get("name") or ""
+    skill_path = skill.get("skill_path") or ".agent-skills"
+    data = fetch_skill_content(source_url, skill_name, skill_path)
+    if not data:
+        raise HTTPException(status_code=502, detail="无法从远程拉取技能内容，请检查网络或源地址")
+    merged = {**skill, "display_name": data["name"], "description": data["description"], "content": data["content"]}
+    db.update_skill(skill_id, merged)
+    app_logger.info("技能管理", f"刷新技能 ID:{skill_id} 成功")
+    return {"status": "success", "message": "已从远程更新技能内容"}
+
 @app.post("/api/command_groups", dependencies=[Depends(verify_token)])
 async def add_command_group(group: CommandGroupModel):
     group_id = db.add_command_group(group.name)
@@ -607,7 +766,38 @@ async def ai_endpoint(
    - 严禁在没有获取足够信息的情况下盲目尝试。
    - 任务完成后必须通过 `summary_report` 闭环，不得无限制执行。
 """
-    combined_prompt = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{command_protocol}"
+    # 4. 注入技能内容（按 device_type 过滤，仅启用且绑定了该类型的技能）
+    MAX_SKILL_CONTENT = 3000
+    MAX_TOTAL_SKILLS = 8000
+    skills_block = ""
+    try:
+        settings = db.get_system_settings()
+        skills_list = db.get_skills_for_device_type(dt_lower, enabled_only=True) if settings.get("skills_enabled", "1") != "0" else []
+        if skills_list:
+            parts = []
+            total_len = 0
+            for s in skills_list:
+                content = (s.get("content") or "").strip()
+                if not content:
+                    continue
+                if len(content) > MAX_SKILL_CONTENT:
+                    content = content[:MAX_SKILL_CONTENT] + "\n...(已截断)"
+                skill_block = f"## 技能: {s.get('display_name') or s.get('name', '')}\n{content}"
+                part_len = len(skill_block)
+                if total_len + part_len > MAX_TOTAL_SKILLS:
+                    remaining = MAX_TOTAL_SKILLS - total_len - 50
+                    if remaining > 100:
+                        skill_block = f"## 技能: {s.get('display_name') or s.get('name', '')}\n{(content[:remaining] if len(content) > remaining else content)}...(已截断)"
+                        parts.append(skill_block)
+                    break
+                parts.append(skill_block)
+                total_len += part_len
+            if parts:
+                skills_block = "\n\n[已启用技能 - 请结合以下知识库回答]\n---\n" + "\n---\n".join(parts) + "\n---\n\n"
+    except Exception as e:
+        app_logger.error("技能注入", f"加载技能失败: {e}")
+
+    combined_prompt = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{skills_block}{command_protocol}"
     
     # 2. 获取 AI 端点
     ai_info = None
@@ -646,11 +836,12 @@ async def ai_endpoint(
             if not messages:
                 continue
             
-            # 动态调整提示词
+            # 动态调整提示词（保持 env_constraints 与 skills_block）
+            base = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{skills_block}"
             if mode == "agent":
-                ai.system_prompt = role_info["system_prompt"] + "\n" + command_protocol
+                ai.system_prompt = base + command_protocol
             else:
-                ai.system_prompt = role_info["system_prompt"] + "\n(注意：当前处于 Ask 模式，请仅通过文本回答，不要要求执行任何 Shell 命令。)"
+                ai.system_prompt = base + "\n(注意：当前处于 Ask 模式，请仅通过文本回答，不要要求执行任何 Shell 命令。)"
 
             # 日志记录 AI 请求
             user_msg = messages[-1]["content"] if messages else ""

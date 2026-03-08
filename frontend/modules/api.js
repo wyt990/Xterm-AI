@@ -86,6 +86,24 @@ export const api = {
     getLogContent: (file, lines) => request(`/api/logs/content?filename=${file}&lines=${lines}`),
     clearLogs: () => request('/api/logs', { method: 'DELETE' }),
 
+    // 技能管理
+    getSkills: (params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        return request(`/api/skills${qs ? '?' + qs : ''}`);
+    },
+    getSkill: (id) => request(`/api/skills/${id}`),
+    addSkill: (data) => request('/api/skills', { method: 'POST', body: JSON.stringify(data) }),
+    updateSkill: (id, data) => request(`/api/skills/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteSkill: (id) => request(`/api/skills/${id}`, { method: 'DELETE' }),
+    toggleSkill: (id) => request(`/api/skills/${id}/toggle`, { method: 'POST' }),
+    refreshSkill: (id) => request(`/api/skills/${id}/refresh`, { method: 'POST' }),
+    translate: (text) => request('/api/translate', { method: 'POST', body: JSON.stringify({ text }) }),
+
+    // 技能商店
+    getRecommendedSkills: (query) => request(`/api/skill_store/recommended?q=${encodeURIComponent(query || '')}`),
+    listSkillsFromRepo: (repo, token) => request(`/api/skill_store/list?repo=${encodeURIComponent(repo)}${token ? '&token=' + encodeURIComponent(token) : ''}`),
+    installSkillFromStore: (data) => request('/api/skill_store/install', { method: 'POST', body: JSON.stringify(data) }),
+
     // 设备类型与绑定
     getDeviceTypes: () => request('/api/device_types'),
     addDeviceType: (data) => request('/api/device_types', { method: 'POST', body: JSON.stringify(data) }),

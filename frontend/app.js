@@ -201,6 +201,11 @@ function initNavigation() {
                 }
             } else if (viewId === 'roles-view') {
                 settings.loadRoles();
+            } else if (viewId === 'skills-view') {
+                (async () => {
+                    await settings.initSkillFilters?.();
+                    await settings.loadSkills?.();
+                })();
             } else if (viewId === 'model-settings-view') {
                 settings.loadAIEndpoints();
             }
