@@ -13,6 +13,12 @@ let memChart = null;
 let historyTimer = null;
 
 export function initStatsModule() {
+    window.addEventListener('statsCleared', (e) => {
+        const tab = currentTabId ? window.getTab(currentTabId) : null;
+        if (!tab || !tab.config?.id) return;
+        if (e.detail.clearAll || tab.config.id === e.detail.serverId) loadStatsHistory(tab.config.id);
+    });
+
     window.addEventListener('tabSwitched', (e) => {
         const tab = e.detail.tab;
         if (tab.id !== currentTabId) {

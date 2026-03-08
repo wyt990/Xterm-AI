@@ -620,6 +620,20 @@ class Database:
             cursor.execute("DELETE FROM server_stats_history WHERE timestamp < datetime('now', ?)", (f'-{days} days',))
             conn.commit()
 
+    def clear_stats_for_server(self, server_id):
+        """清除指定服务器的所有状态历史记录"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM server_stats_history WHERE server_id = ?", (server_id,))
+            conn.commit()
+
+    def clear_all_stats_history(self):
+        """清除 server_stats_history 表中所有记录"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM server_stats_history")
+            conn.commit()
+
     # --- 技能相关操作 ---
     def get_all_skills(self, enabled_only=False, device_type_id=None):
         """获取所有技能，支持按启用状态、设备类型过滤"""

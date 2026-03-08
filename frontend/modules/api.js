@@ -121,6 +121,8 @@ export const api = {
 
     // 系统指标与监控
     getStatsHistory: (serverId, minutes = 30) => request(`/api/servers/${serverId}/stats/history?minutes=${minutes}`),
+    clearServerStats: (serverId) => request(`/api/servers/${serverId}/stats/history`, { method: 'DELETE' }),
+    clearAllStatsHistory: () => request('/api/servers/stats/history/all', { method: 'DELETE' }),
     killProcess: (serverId, pid) => {
         const fd = new FormData();
         fd.append('pid', pid);

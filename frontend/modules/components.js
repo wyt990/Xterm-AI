@@ -39,6 +39,9 @@ class ServerCard extends HTMLElement {
                 <p>${s.host}:${s.port}</p>
             </div>
             <div class="server-card-actions">
+                <button class="btn-icon" title="清除状态记录" onclick="event.stopPropagation(); window.clearServerStats(${s.id}, '${safeName}')">
+                    <i class="fas fa-eraser"></i>
+                </button>
                 <button class="btn-icon" title="编辑" onclick="event.stopPropagation(); window.showEditServerModal(${s.id})">
                     <i class="fas fa-edit"></i>
                 </button>

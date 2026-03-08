@@ -1047,6 +1047,20 @@ async def get_server_stats_history(server_id: int, minutes: int = 30):
     """获取过去 X 分钟的历史指标数据"""
     return db.get_stats_history(server_id, minutes)
 
+
+@app.delete("/api/servers/stats/history/all", dependencies=[Depends(verify_token)])
+async def clear_all_stats_history():
+    """清除所有服务器的状态历史记录"""
+    db.clear_all_stats_history()
+    return {"status": "success", "message": "已清除所有服务器的状态记录"}
+
+
+@app.delete("/api/servers/{server_id}/stats/history", dependencies=[Depends(verify_token)])
+async def clear_server_stats_history(server_id: int):
+    """清除指定服务器的所有状态历史记录"""
+    db.clear_stats_for_server(server_id)
+    return {"status": "success", "message": "已清除该服务器的状态记录"}
+
 @app.post("/api/servers/{server_id}/process/kill", dependencies=[Depends(verify_token)])
 async def kill_process(server_id: int, pid: int = Form(...)):
     """杀死指定 PID 的进程"""

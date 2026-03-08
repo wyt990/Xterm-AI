@@ -53,6 +53,7 @@ export function initSettingsModule() {
     window.showLogsModal = showLogsModal;
     window.loadLogContent = loadLogContent;
     window.handleClearLogs = handleClearLogs;
+    window.handleClearAllStatsHistory = handleClearAllStatsHistory;
 
     // 命令管理
     window.showAddCommandGroupModal = () => {
@@ -642,6 +643,15 @@ async function handleClearLogs() {
         notify("日志已清空");
         if (document.getElementById('logs-modal').style.display === 'flex') loadLogContent();
     }
+}
+
+async function handleClearAllStatsHistory() {
+    if (!confirm("确定要清除所有服务器的状态记录吗？（CPU、内存、磁盘趋势图数据）")) return;
+    try {
+        await api.clearAllStatsHistory();
+        notify("已清除所有服务器的状态记录", "success");
+        window.dispatchEvent(new CustomEvent('statsCleared', { detail: { serverId: null, clearAll: true } }));
+    } catch (err) { notify("清除失败: " + err.message, "error"); }
 }
 
 // --- 初始化所有表单 ---

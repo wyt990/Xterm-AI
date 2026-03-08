@@ -560,6 +560,15 @@ window.deleteServer = async (id, name) => {
     } catch (err) { notify('删除失败: ' + err.message, 'error'); }
 };
 
+window.clearServerStats = async (serverId, serverName) => {
+    if (!confirm(`确定要清除服务器「${serverName}」的所有状态记录吗？`)) return;
+    try {
+        await api.clearServerStats(serverId);
+        notify(`已清除「${serverName}」的状态记录`, 'success');
+        window.dispatchEvent(new CustomEvent('statsCleared', { detail: { serverId } }));
+    } catch (err) { notify('清除失败: ' + err.message, 'error'); }
+};
+
 // 监听服务器变更事件
 window.addEventListener('serversChanged', () => {
     loadServers();
