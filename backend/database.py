@@ -331,6 +331,7 @@ class Database:
     def delete_server(self, server_id):
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute('DELETE FROM server_stats_history WHERE server_id = ?', (server_id,))
             cursor.execute('DELETE FROM servers WHERE id = ?', (server_id,))
             conn.commit()
 
