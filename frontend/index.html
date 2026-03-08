@@ -249,9 +249,14 @@
             <div id="server-list-view" class="view">
                 <div class="view-header">
                     <h2>服务器资产管理</h2>
-                    <button class="btn btn-primary" onclick="showAddServerModal()">
-                        <i class="fas fa-plus"></i> 添加服务器
-                    </button>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="showDeviceTypeMgr()" style="margin-right: 10px;">
+                            <i class="fas fa-cogs"></i> 系统类型管理
+                        </button>
+                        <button class="btn btn-primary" onclick="showAddServerModal()">
+                            <i class="fas fa-plus"></i> 添加服务器
+                        </button>
+                    </div>
                 </div>
                 <div class="server-groups" id="server-list-container"></div>
             </div>
@@ -339,7 +344,7 @@
     <script src="/static/js/xterm.js"></script>
     <script src="/static/js/xterm-addon-fit.js"></script>
     <script src="/static/js/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/js/chart.min.js"></script>
     <script src="/static/lib/ace/ace.js"></script>
     <script src="/static/lib/ace/ext-language_tools.js"></script>
     <script src="/static/lib/ace/ext-modelist.js"></script>

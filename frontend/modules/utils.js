@@ -11,7 +11,8 @@ export async function loadComponents() {
         'command_modals.html',
         'sftp_modals.html',
         'editor_modals.html',
-        'system_modals.html'
+        'system_modals.html',
+        'device_type_modals.html'
     ];
     
     const placeholder = document.getElementById('component-placeholder');

@@ -29,7 +29,7 @@ export function initSettingsModule() {
             form.username.value = server.username;
             form.password.value = server.password;
             form.group_name.value = server.group_name;
-            form.device_type.value = server.device_type;
+            form.device_type_id.value = server.device_type_id || "";
             form.description.value = server.description;
             showModal('server-modal');
         } catch (err) { notify("获取服务器信息失败", "error"); }
@@ -40,11 +40,12 @@ export function initSettingsModule() {
         document.getElementById('ai-id').value = '';
         showModal('ai-modal');
     };
-    window.showAddRoleModal = () => {
+    window.showAddRoleModal = async () => {
         document.getElementById('role-modal-title').innerText = '创建 AI 角色';
         document.getElementById('role-form').reset();
         document.getElementById('role-id').value = '';
         loadAISelectOptions();
+        await loadRoleDeviceTypeCheckboxes(null);
         showModal('role-modal');
     };
     window.testAIFromModal = testAIFromModal;
@@ -174,13 +175,16 @@ export async function loadRoles() {
             </div>
         `).join('');
         
-        window.editRole = (id) => {
+        window.editRole = async (id) => {
             const role = roles.find(r => r.id === id);
             document.getElementById('role-modal-title').innerText = '编辑 AI 角色';
             document.getElementById('role-id').value = role.id;
-            document.getElementById('role-form').name.value = role.name;
-            document.getElementById('role-form').system_prompt.value = role.system_prompt;
+            const form = document.getElementById('role-form');
+            form.name.value = role.name;
+            form.system_prompt.value = role.system_prompt;
             loadAISelectOptions(role.ai_endpoint_id);
+            // 加载绑定的系统类型
+            await loadRoleDeviceTypeCheckboxes(role.id);
             showModal('role-modal');
         };
         window.setActiveRole = async (id) => { await api.setActiveRole(id); loadRoles(); };
@@ -193,6 +197,20 @@ async function loadAISelectOptions(selectedId = null) {
     const select = document.getElementById('role-ai-select');
     select.innerHTML = '<option value="">使用系统默认激活端点</option>' + 
         endpoints.map(ai => `<option value="${ai.id}" ${ai.id == selectedId ? 'selected' : ''}>${ai.name}</option>`).join('');
+}
+
+async function loadRoleDeviceTypeCheckboxes(roleId = null) {
+    const container = document.getElementById('role-device-type-list');
+    if (!container) return;
+    try {
+        const types = await api.getDeviceTypes();
+        container.innerHTML = types.map(t => `
+            <label class="checkbox-label" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: ${t.role_id === roleId && roleId !== null ? '#0078d4' : '#2d2d2d'}; border-radius: 3px; cursor: pointer;">
+                <input type="checkbox" name="bound_device_types" value="${t.id}" ${t.role_id === roleId && roleId !== null ? 'checked' : ''} style="margin: 0;">
+                <span style="font-size: 12px;">${t.name}</span>
+            </label>
+        `).join('');
+    } catch (err) { console.error("加载系统类型失败", err); }
 }
 
 // --- 系统日志逻辑 ---
@@ -257,15 +275,21 @@ function initForms() {
     document.getElementById('role-form').onsubmit = async (e) => {
         e.preventDefault();
         const id = document.getElementById('role-id').value;
+        const checkedTypes = Array.from(e.target.querySelectorAll('input[name="bound_device_types"]:checked')).map(cb => parseInt(cb.value));
         const data = {
             name: e.target.name.value,
             system_prompt: e.target.system_prompt.value,
-            ai_endpoint_id: e.target.ai_endpoint_id.value || null
+            ai_endpoint_id: e.target.ai_endpoint_id.value || null,
+            bound_device_types: checkedTypes
         };
-        if (id) await api.updateRole(id, data);
-        else await api.addRole(data);
-        closeModal('role-modal');
-        loadRoles();
+        try {
+            if (id) await api.updateRole(id, data);
+            else await api.addRole(data);
+            closeModal('role-modal');
+            notify("保存角色成功", "success");
+            loadRoles();
+            if (window.loadDeviceTypes) window.loadDeviceTypes();
+        } catch (err) { notify("保存角色失败: " + err.message, "error"); }
     };
 
     // AI 端点表单

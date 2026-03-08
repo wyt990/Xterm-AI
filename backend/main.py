@@ -106,6 +106,7 @@ class RoleModel(BaseModel):
     system_prompt: str
     ai_endpoint_id: Optional[int] = None
     is_active: int = 0
+    bound_device_types: List[int] = [] # 新增：绑定的设备类型 ID 列表
 
 class AITestModel(BaseModel):
     api_key: str
@@ -270,12 +271,19 @@ async def get_role(role_id: int):
 
 @app.post("/api/roles", dependencies=[Depends(verify_token)])
 async def add_role(role: RoleModel):
-    role_id = db.add_role(role.model_dump())
+    data = role.model_dump()
+    bound_types = data.pop('bound_device_types', [])
+    role_id = db.add_role(data)
+    if bound_types:
+        db.update_device_type_role_bindings(role_id, bound_types)
     return {"id": role_id, "status": "success"}
 
 @app.put("/api/roles/{role_id}", dependencies=[Depends(verify_token)])
 async def update_role(role_id: int, role: RoleModel):
-    db.update_role(role_id, role.model_dump())
+    data = role.model_dump()
+    bound_types = data.pop('bound_device_types', [])
+    db.update_role(role_id, data)
+    db.update_device_type_role_bindings(role_id, bound_types)
     return {"status": "success"}
 
 @app.delete("/api/roles/{role_id}", dependencies=[Depends(verify_token)])
@@ -396,6 +404,30 @@ async def clear_logs():
 async def list_command_groups():
     return db.get_all_command_groups()
 
+class DeviceTypeModel(BaseModel):
+    name: str
+    value: str
+    icon: str = "fas fa-microchip"
+    role_id: Optional[int] = None
+
+@app.get("/api/device_types", dependencies=[Depends(verify_token)])
+async def list_device_types():
+    return db.get_all_device_types()
+
+@app.post("/api/device_types", dependencies=[Depends(verify_token)])
+async def add_device_type(data: DeviceTypeModel):
+    return {"id": db.add_device_type(data.dict())}
+
+@app.put("/api/device_types/{type_id}", dependencies=[Depends(verify_token)])
+async def update_device_type(type_id: int, data: DeviceTypeModel):
+    db.update_device_type(type_id, data.dict())
+    return {"status": "success"}
+
+@app.delete("/api/device_types/{type_id}", dependencies=[Depends(verify_token)])
+async def delete_device_type(type_id: int):
+    db.delete_device_type(type_id)
+    return {"status": "success"}
+
 @app.post("/api/command_groups", dependencies=[Depends(verify_token)])
 async def add_command_group(group: CommandGroupModel):
     group_id = db.add_command_group(group.name)
@@ -490,22 +522,91 @@ async def ssh_endpoint(websocket: WebSocket, server_id: int):
 
 # --- WebSocket AI 连接 ---
 @app.websocket("/ws/ai")
-async def ai_endpoint(websocket: WebSocket, role_id: Optional[int] = None):
+async def ai_endpoint(
+    websocket: WebSocket, 
+    role_id: Optional[int] = None,
+    device_type: str = "unknown",
+    server_name: str = "未选定服务器"
+):
     if not await verify_ws_token(websocket):
         await websocket.accept()
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     await websocket.accept()
     
-    # 1. 获取角色：优先使用前端传入的 role_id，否则使用全局激活角色
+    # 1. 获取角色
     role_info = None
     if role_id:
         role_info = db.get_role_by_id(role_id)
     if not role_info:
         role_info = db.get_active_role()
     if not role_info:
-        # 兜底：获取第一个角色或使用内置提示词
         role_info = {"system_prompt": "You are a helpful assistant.", "ai_endpoint_id": None}
+    
+    # 2. 根据服务器环境动态生成【环境约束】
+    env_constraints = f"""
+[当前操作环境信息]
+- 服务器名称: {server_name}
+- 操作系统/设备类型: {device_type}
+
+[执行约束 - 请严格遵守]
+"""
+    dt_lower = device_type.lower()
+    if dt_lower == "windows":
+        env_constraints += """
+* 目标系统为 Windows，你必须使用 PowerShell 语法。
+* 禁止使用 `ls`, `cat`, `rm -rf` 等 Linux 命令。
+* 使用 `Get-ChildItem`, `Get-Content`, `Remove-Item` 等 PowerShell Cmdlets。
+* 若不确定版本，请先执行 `[System.Environment]::OSVersion`。
+"""
+    elif dt_lower in ["huawei", "h3c", "cisco", "ruijie"]:
+        env_constraints += f"""
+* 目标是 {device_type.upper()} 网络设备命令行(VRP/Comware/IOS)。
+* 严禁执行任何 Shell/Bash 命令。
+* 你必须使用该厂商特有的 CLI 命令（如 `display current-configuration`, `show version` 等）。
+* 每一行命令必须符合网络设备的交互逻辑。
+"""
+    elif dt_lower == "linux":
+        env_constraints += """
+* 目标系统为 Linux (Bash Shell)。
+* 请优先执行 `cat /etc/os-release` 以确定具体的发行版（Ubuntu/CentOS等）。
+"""
+    else:
+        env_constraints += """
+* 目标系统类型【未知】或【未指定】。
+* 你的首要任务是识别操作系统。请先发送一个通用的探测指令，如 `uname -a || ver || show version`。
+* 在确定系统类型之前，不要执行任何具有修改性质的操作。
+"""
+
+    # 3. 注入硬编码的命令执行协议
+    command_protocol = """
+[智能运维助手 - 核心指令规范]
+1. 任务分解：请将复杂任务拆解。在每一轮回复中，你【必须且只能】发送【一个】JSON 指令块。
+2. 状态管理：
+   - 探测与分析：当你需要执行命令获取信息时，发送 `command_request`。
+   - 任务完成：当用户需求已满足或问题已解决时，你必须发送 `summary_report`。
+3. JSON 格式规范：
+   - 执行命令：
+     ```json
+     {
+       "type": "command_request",
+       "command": "具体的 shell 命令",
+       "intent": "说明为什么要执行此命令"
+     }
+     ```
+   - 任务终结总结：
+     ```json
+     {
+       "type": "summary_report",
+       "content": "用 Markdown 格式编写的详细操作总结、分析报告或建议。"
+     }
+     ```
+4. 约束：
+   - 严禁一次性提供多个备选命令。
+   - 严禁在没有获取足够信息的情况下盲目尝试。
+   - 任务完成后必须通过 `summary_report` 闭环，不得无限制执行。
+"""
+    combined_prompt = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{command_protocol}"
     
     # 2. 获取 AI 端点
     ai_info = None
@@ -514,20 +615,6 @@ async def ai_endpoint(websocket: WebSocket, role_id: Optional[int] = None):
     
     if not ai_info:
         ai_info = db.get_active_ai_endpoint()
-    
-    # 3. 注入硬编码的命令执行协议（技术指令不再由用户可见的角色设置提供）
-    command_protocol = """
-[技术指令 - 核心准则]
-1. 执行命令：当你需要执行 Shell 命令或建议用户执行命令时，必须在回复中包含以下格式的 JSON 块：
-{
-  "type": "command_request",
-  "command": "具体的命令内容"
-}
-2. 每一个命令建议都必须是一个独立的 JSON 块，严禁使用 Markdown 表格、Markdown 列表或纯文本块来展示命令。
-3. 交互性要求：你的回复中可以包含文字分析，但所有的操作建议必须通过上述 JSON 块提供，以便用户直接点击执行。
-4. 格式规范：JSON 块可以放在 Markdown 代码块中（如 ```json ... ```），也可以直接放在正文中。
-"""
-    combined_prompt = role_info["system_prompt"] + "\n" + command_protocol
     
     ai_config = {
         "api_key": ai_info["api_key"] if ai_info else os.getenv("AI_API_KEY"),

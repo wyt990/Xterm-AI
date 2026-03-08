@@ -7,6 +7,32 @@ import { notify } from './utils.js';
 
 let aiSocket = null;
 let isAiProcessing = false;
+let autoExecuteCount = 0; // 自动连续执行次数计数器，防止死循环
+const MAX_AUTO_EXECUTE = 5; 
+
+// 判定命令是否安全（只读，无重定向，无管道写入）
+function isSafeCommand(cmd) {
+    const unsafeKeywords = [
+        'rm', 'kill', 'mv', 'cp', 'chmod', 'chown', 'reboot', 'shutdown', 
+        'mkfs', 'dd', 'fdisk', 'parted', 'apt', 'yum', 'dnf', 'wget', 'curl',
+        'sh', 'bash', 'python', 'perl', 'ruby', 'gcc', 'make', 'install',
+        '>>', '>', '|'
+    ];
+    const safeReadCommands = [
+        'ls', 'cat', 'df', 'free', 'uptime', 'hostname', 'uname', 'grep', 
+        'tail', 'head', 'ps', 'netstat', 'ss', 'ip', 'ifconfig', 'ping',
+        'cat /etc/', 'top', 'htop', 'iotop', 'vmstat', 'iostat', 'lsof'
+    ];
+    
+    const cmdTrim = cmd.trim();
+    // 检查是否包含危险操作符（写重定向、管道写入等）
+    if (cmdTrim.includes('>') || cmdTrim.includes('>>')) {
+        return false;
+    }
+
+    // 只要匹配了安全列表的前缀，且不包含危险关键字，则视为安全
+    return safeReadCommands.some(s => cmdTrim.startsWith(s)) && !unsafeKeywords.some(u => cmdTrim.includes(` ${u} `) || cmdTrim.startsWith(`${u} `));
+}
 const aiMessages = document.getElementById('ai-messages');
 const aiInput = document.getElementById('ai-input');
 const sendBtn = document.getElementById('send-btn');
@@ -55,10 +81,14 @@ export function initAIModule() {
     loadRoles();
 
     // 绑定发送按钮
-    sendBtn.onclick = handleAISend;
+    sendBtn.onclick = () => {
+        autoExecuteCount = 0;
+        handleAISend();
+    };
     aiInput.onkeydown = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
+            autoExecuteCount = 0;
             handleAISend();
         }
     };
@@ -86,8 +116,27 @@ export function initAIModule() {
     // 标签切换：刷新消息列表 + 同步角色选择器
     window.addEventListener('tabSwitched', (e) => {
         const tab = e.detail.tab;
-        // 同步角色选择器：该 tab 有绑定角色则显示，否则显示默认激活角色
-        roleSelect.value = tab.roleId || defaultRoleId || (allRoles[0] && allRoles[0].id) || '';
+        
+        // 核心逻辑：场景驱动的角色自动切换
+        let roleIdToSelect = tab.roleId; // 优先使用该会话手动选过的角色
+        
+        if (!roleIdToSelect && window.allDeviceTypes) {
+            // 如果没手动选过，根据服务器 device_type 寻找绑定的角色
+            const dtype = window.allDeviceTypes.find(t => t.value === (tab.config.device_type_value || tab.config.device_type));
+            if (dtype && dtype.role_id) {
+                roleIdToSelect = dtype.role_id;
+                console.log(`🎯 检测到设备类型 ${tab.config.device_type_value || tab.config.device_type}，自动匹配 AI 角色 ID: ${roleIdToSelect}`);
+            }
+        }
+
+        // 同步角色选择器：匹配不到绑定关系时使用默认激活角色
+        roleSelect.value = roleIdToSelect || defaultRoleId || (allRoles[0] && allRoles[0].id) || '';
+        
+        // 如果是自动匹配出的角色，且当前 tab 还没记录过，同步给 tab 以保持会话一致性
+        if (!tab.roleId && roleIdToSelect) {
+            tab.roleId = roleIdToSelect;
+        }
+
         // 重渲染消息历史
         aiMessages.innerHTML = '';
         tab.chatHistory.forEach(msg => {
@@ -138,9 +187,17 @@ function openAISocket(messages, tab) {
     const mode = document.getElementById('ai-mode-select').value;
     const roleId = getCurrentRoleId();
     const token = localStorage.getItem('xterm_token');
+    
+    // 注入服务器上下文
+    const serverId = tab.config?.id || '';
+    const deviceType = tab.config?.device_type || 'unknown';
+    const serverName = encodeURIComponent(tab.config?.name || '');
+
     const roleParam = roleId ? `&role_id=${roleId}` : '';
     const tokenParam = token ? `&token=${token}` : '';
-    const wsUrl = `${protocol}//${window.location.host}/ws/ai?mode=${mode}${roleParam}${tokenParam}`;
+    const contextParam = `&server_id=${serverId}&device_type=${deviceType}&server_name=${serverName}`;
+    
+    const wsUrl = `${protocol}//${window.location.host}/ws/ai?mode=${mode}${roleParam}${tokenParam}${contextParam}`;
 
     aiSocket = new WebSocket(wsUrl);
     const currentAiMsgDiv = createMessageDiv('ai');
@@ -254,16 +311,17 @@ export function appendMessage(role, content, tab) {
     return div;
 }
 
-// --- 核心：JSON 指令解析渲染（移植自原始版，正则 + 字符串感知大括号计数）---
+// --- 核心：JSON 指令解析渲染（正则 + 字符串感知大括号计数）---
 function processAIResponseForCommands(text, msgDiv, tab) {
     try {
         msgDiv.classList.add('rendered');
         msgDiv.innerHTML = '';
 
         let lastIndex = 0;
-        // 用正则定位含 "type":"command_request" 的 JSON 块起点
-        const startRegex = /(?:```(?:json)?\s*)?\{[\s\S]*?"type"\s*:\s*"command_request"/g;
+        // 匹配 command_request 或 summary_report
+        const startRegex = /(?:```(?:json)?\s*)?\{[\s\S]*?"type"\s*:\s*"(command_request|summary_report)"/g;
         let match;
+        let commandFound = false;
 
         while ((match = startRegex.exec(text)) !== null) {
             // 1. 渲染 JSON 之前的文本
@@ -275,13 +333,9 @@ function processAIResponseForCommands(text, msgDiv, tab) {
                 msgDiv.appendChild(textNode);
             }
 
-            // 2. 用字符串感知的大括号计数器找到 JSON 的真正结束位置
+            // 2. 找到 JSON 结束位置
             const startPos = text.indexOf('{', match.index);
-            let braceCount = 0;
-            let inString = false;
-            let escaped = false;
-            let endPos = -1;
-
+            let braceCount = 0, inString = false, escaped = false, endPos = -1;
             for (let i = startPos; i < text.length; i++) {
                 const char = text[i];
                 if (escaped) { escaped = false; continue; }
@@ -289,27 +343,38 @@ function processAIResponseForCommands(text, msgDiv, tab) {
                 if (char === '"') { inString = !inString; continue; }
                 if (!inString) {
                     if (char === '{') braceCount++;
-                    if (char === '}') {
-                        braceCount--;
-                        if (braceCount === 0) { endPos = i + 1; break; }
-                    }
+                    if (char === '}') { braceCount--; if (braceCount === 0) { endPos = i + 1; break; } }
                 }
             }
 
             if (endPos !== -1) {
                 const jsonStr = text.substring(startPos, endPos);
-                // 跳过可能的 Markdown 代码块闭合标记
                 let fullEndPos = endPos;
                 if (text.substring(endPos).trimStart().startsWith('```')) {
                     fullEndPos = text.indexOf('```', endPos) + 3;
                 }
 
                 try {
-                    const cmdData = JSON.parse(jsonStr);
-                    const command = cmdData.command.trim();
-                    renderCommandCard(command, msgDiv, tab);
+                    const data = JSON.parse(jsonStr);
+                    if (data.type === 'command_request' && !commandFound) {
+                        commandFound = true; // 每一轮回复只处理第一个指令
+                        const command = data.command.trim();
+                        const mode = document.getElementById('ai-mode-select').value;
+                        
+                        // 判定：Agent 模式 + 安全命令 + 未超限 -> 自动执行
+                        if (mode === 'agent' && isSafeCommand(command) && autoExecuteCount < MAX_AUTO_EXECUTE) {
+                            autoExecuteCount++;
+                            renderAutoExecuteCard(command, data.intent, msgDiv, tab);
+                            executeAICommand(command, tab);
+                        } else {
+                            renderCommandCard(command, msgDiv, tab);
+                        }
+                    } else if (data.type === 'summary_report') {
+                        renderSummaryReport(data.content, msgDiv);
+                        autoExecuteCount = 0; // 任务达成，重置计数
+                    }
                 } catch (e) {
-                    // JSON 解析失败，降级为文本
+                    // 解析失败，降级显示
                     const errNode = document.createElement('div');
                     errNode.className = 'message-text-content';
                     errNode.innerText = text.substring(match.index, fullEndPos);
@@ -332,9 +397,46 @@ function processAIResponseForCommands(text, msgDiv, tab) {
             msgDiv.appendChild(textNode);
         }
     } catch (e) {
-        console.error('处理 AI 响应命令失败:', e);
+        console.error('处理 AI 响应失败:', e);
         msgDiv.innerText = text;
     }
+}
+
+// 渲染自动执行卡片
+function renderAutoExecuteCard(command, intent, container, tab) {
+    const card = document.createElement('div');
+    card.className = 'command-card auto-executing';
+    card.style.borderLeft = '3px solid #0078d4';
+    card.innerHTML = `
+        <div class="command-card-header" style="color:#0078d4; background: rgba(0,120,212,0.05)">
+            <i class="fas fa-robot"></i> <span>智能体自动执行中...</span>
+        </div>
+        <div class="command-card-body">
+            <div style="font-size:12px;color:#888;margin-bottom:5px;">意图：${intent || '自动探测系统状态'}</div>
+            <code>${command}</code>
+        </div>
+    `;
+    container.appendChild(card);
+}
+
+// 渲染总结报告
+function renderSummaryReport(content, container) {
+    const report = document.createElement('div');
+    report.className = 'summary-report-card';
+    report.style.marginTop = '10px';
+    report.style.border = '1px solid #4caf50';
+    report.style.borderRadius = '6px';
+    report.style.overflow = 'hidden';
+    report.innerHTML = `
+        <div class="report-header" style="background:#4caf50; color:white; padding:6px 12px; font-weight:bold; font-size:13px;">
+            <i class="fas fa-clipboard-check"></i> 任务阶段性总结
+        </div>
+        <div class="report-body message-text-content" style="padding:12px; background: rgba(76,175,80,0.05)">
+            ${typeof marked !== 'undefined' ? marked.parse(content) : content}
+        </div>
+    `;
+    container.appendChild(report);
+    notify('任务已达成，查看总结报告', 'success');
 }
 
 // 渲染指令卡片

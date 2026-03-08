@@ -88,6 +88,7 @@ async function startApp() {
     loadServers();
     loadConnectionHistory();
     loadCommandGroups();
+    loadDeviceTypes(); // 加载设备类型
 
     // 监听命令变更
     window.addEventListener('commandsChanged', () => loadCommandGroups());
@@ -435,6 +436,121 @@ window.toggleSidebar = () => {
 window.loadServers = loadServers;
 window.loadConnectionHistory = loadConnectionHistory;
 window.connectToServer = connectToServer;
+
+// 动态加载设备类型到下拉框
+async function loadDeviceTypes() {
+    try {
+        const types = await api.getDeviceTypes();
+        window.allDeviceTypes = types; // 存入全局供 ai_chat 和各处使用
+        
+        // 1. 填充服务器编辑弹窗的下拉框
+        const selects = document.querySelectorAll('select[name="device_type_id"]');
+        selects.forEach(sel => {
+            const currentVal = sel.value;
+            sel.innerHTML = types.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            if (currentVal) sel.value = currentVal;
+        });
+
+        // 2. 填充系统类型管理中的角色下拉框 (如果是打开状态)
+        const dtRoleSelect = document.getElementById('dt-role-select');
+        if (dtRoleSelect) {
+            const roles = await api.getRoles();
+            dtRoleSelect.innerHTML = '<option value="">不绑定（使用系统激活角色）</option>' + 
+                roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+        }
+    } catch (err) { console.error("加载设备类型失败", err); }
+}
+window.loadDeviceTypes = loadDeviceTypes;
+
+// --- 系统类型管理逻辑 ---
+window.showDeviceTypeMgr = async () => {
+    showModal('device-type-mgr-modal');
+    loadDeviceTypeList();
+};
+
+async function loadDeviceTypeList() {
+    const tbody = document.getElementById('device-type-list-body');
+    if (!tbody) return;
+    try {
+        const types = await api.getDeviceTypes();
+        window.allDeviceTypes = types;
+        tbody.innerHTML = types.map(t => `
+            <tr>
+                <td>${t.name}</td>
+                <td><code>${t.value}</code></td>
+                <td><i class="${t.icon || 'fas fa-microchip'}"></i></td>
+                <td>${t.role_name || '<span style="color:#666">未绑定</span>'}</td>
+                <td>
+                    <button class="btn-icon" onclick="showEditDeviceType(${t.id})" title="编辑"><i class="fas fa-edit"></i></button>
+                    <button class="btn-icon" onclick="deleteDeviceType(${t.id}, '${t.name}')" title="删除"><i class="fas fa-trash-alt"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) { notify('加载列表失败', 'error'); }
+}
+
+window.showAddDeviceType = async () => {
+    document.getElementById('device-type-modal-title').innerText = '新增系统类型';
+    const form = document.getElementById('device-type-form');
+    form.reset();
+    document.getElementById('dt-id').value = '';
+    await loadDeviceTypes(); // 确保角色下拉框有数据
+    showModal('device-type-edit-modal');
+};
+
+window.showEditDeviceType = async (id) => {
+    const type = window.allDeviceTypes.find(t => t.id === id);
+    if (!type) return;
+    document.getElementById('device-type-modal-title').innerText = '编辑系统类型';
+    const form = document.getElementById('device-type-form');
+    form.id.value = type.id;
+    form.name.value = type.name;
+    form.value.value = type.value;
+    form.icon.value = type.icon || '';
+    await loadDeviceTypes(); // 确保角色下拉框有数据
+    form.role_id.value = type.role_id || '';
+    showModal('device-type-edit-modal');
+};
+
+window.deleteDeviceType = async (id, name) => {
+    if (!confirm(`确定要删除系统类型「${name}」吗？\n关联该类型的服务器将被设为“未知”。`)) return;
+    try {
+        await api.deleteDeviceType(id);
+        notify('删除成功', 'success');
+        loadDeviceTypeList();
+        loadDeviceTypes();
+        loadServers(); // 刷新服务器列表显示
+    } catch (err) { notify('删除失败', 'error'); }
+};
+
+// 绑定系统类型表单提交
+document.addEventListener('DOMContentLoaded', () => {
+    const dtForm = document.getElementById('device-type-form');
+    if (dtForm) {
+        dtForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(dtForm);
+            const data = Object.fromEntries(formData.entries());
+            const id = data.id;
+            delete data.id;
+            if (data.role_id === "") data.role_id = null;
+
+            try {
+                if (id) {
+                    await api.updateDeviceType(id, data);
+                    notify('更新成功', 'success');
+                } else {
+                    await api.addDeviceType(data);
+                    notify('添加成功', 'success');
+                }
+                closeModal('device-type-edit-modal');
+                loadDeviceTypeList();
+                loadDeviceTypes();
+            } catch (err) { notify('保存失败: ' + err.message, 'error'); }
+        };
+    }
+});
+
 window.deleteServer = async (id, name) => {
     if (!confirm(`确定要删除服务器「${name}」吗？`)) return;
     try {

@@ -118,6 +118,43 @@ class Database:
                 )
             ''')
             
+            # 8. 设备类型表 (新增：用于绑定角色)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS device_types (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    value TEXT NOT NULL UNIQUE,
+                    icon TEXT,
+                    role_id INTEGER,
+                    FOREIGN KEY (role_id) REFERENCES roles(id)
+                )
+            ''')
+            
+            # 初始化默认设备类型
+            cursor.execute('SELECT count(*) FROM device_types')
+            if cursor.fetchone()[0] == 0:
+                types = [
+                    ('Linux', 'linux', 'fab fa-linux', 3),      # 绑定 Linux 运维专家(ID:3)
+                    ('Windows', 'windows', 'fab fa-windows', 4),# 绑定 Windows 运维专家(ID:4)
+                    ('H3C', 'h3c', 'fas fa-network-wired', 5),  # 绑定 网络设备运维(ID:5)
+                    ('华为', 'huawei', 'fas fa-network-wired', 5),
+                    ('锐捷', 'ruijie', 'fas fa-network-wired', 5),
+                    ('思科', 'cisco', 'fas fa-network-wired', 5),
+                    ('其它', 'other', 'fas fa-microchip', None)
+                ]
+                cursor.executemany('INSERT INTO device_types (name, value, icon, role_id) VALUES (?, ?, ?, ?)', types)
+
+            # 自动迁移：servers 表增加 device_type_id
+            cursor.execute("PRAGMA table_info(servers)")
+            server_cols = [c[1] for c in cursor.fetchall()]
+            if 'device_type_id' not in server_cols:
+                cursor.execute("ALTER TABLE servers ADD COLUMN device_type_id INTEGER")
+                # 尝试通过已有的 device_type 字符串匹配 ID
+                cursor.execute("SELECT id, value FROM device_types")
+                types = cursor.fetchall()
+                for tid, val in types:
+                    cursor.execute("UPDATE servers SET device_type_id = ? WHERE device_type = ?", (tid, val))
+            
             # 初始化默认设置
             default_settings = {
                 "log_enabled": "1",
@@ -164,24 +201,40 @@ class Database:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute('SELECT * FROM servers ORDER BY group_name, name')
+            # 联表查询获取 device_type 的具体 value
+            cursor.execute('''
+                SELECT s.*, dt.value as device_type_value, dt.name as device_type_name
+                FROM servers s
+                LEFT JOIN device_types dt ON s.device_type_id = dt.id
+                ORDER BY group_name, name
+            ''')
             rows = [dict(row) for row in cursor.fetchall()]
             # 解密关键字段
             for r in rows:
                 r['password'] = self._decrypt(r.get('password'))
                 r['private_key'] = self._decrypt(r.get('private_key'))
+                # 兼容旧代码：如果 device_type_value 为空，则用原有的 device_type 字符串
+                if not r.get('device_type_value'):
+                    r['device_type_value'] = r.get('device_type') or 'linux'
             return rows
 
     def get_server_by_id(self, server_id):
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute('SELECT * FROM servers WHERE id = ?', (server_id,))
+            cursor.execute('''
+                SELECT s.*, dt.value as device_type_value, dt.name as device_type_name
+                FROM servers s
+                LEFT JOIN device_types dt ON s.device_type_id = dt.id
+                WHERE s.id = ?
+            ''', (server_id,))
             row = cursor.fetchone()
             if row:
                 res = dict(row)
                 res['password'] = self._decrypt(res.get('password'))
                 res['private_key'] = self._decrypt(res.get('private_key'))
+                if not res.get('device_type_value'):
+                    res['device_type_value'] = res.get('device_type') or 'linux'
                 return res
             return None
 
@@ -190,11 +243,20 @@ class Database:
             cursor = conn.cursor()
             encrypted_password = self._encrypt(data.get('password'))
             encrypted_private_key = self._encrypt(data.get('private_key'))
+            
+            # 从 device_type_id 获取对应的 value 字符串（保持兼容）
+            device_type_id = data.get('device_type_id')
+            device_type_str = data.get('device_type', 'linux')
+            if device_type_id:
+                cursor.execute("SELECT value FROM device_types WHERE id = ?", (device_type_id,))
+                row = cursor.fetchone()
+                if row: device_type_str = row[0]
+            
             cursor.execute('''
-                INSERT INTO servers (name, host, port, username, password, private_key, group_name, device_type, description)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO servers (name, host, port, username, password, private_key, group_name, device_type_id, device_type, description)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (data['name'], data['host'], data.get('port', 22), data['username'], encrypted_password, 
-                  encrypted_private_key, data.get('group_name', 'default'), data.get('device_type', 'linux'), data.get('description')))
+                  encrypted_private_key, data.get('group_name', 'default'), device_type_id, device_type_str, data.get('description')))
             conn.commit()
             return cursor.lastrowid
 
@@ -203,12 +265,28 @@ class Database:
             cursor = conn.cursor()
             encrypted_password = self._encrypt(data.get('password'))
             encrypted_private_key = self._encrypt(data.get('private_key'))
-            cursor.execute('''
-                UPDATE servers 
-                SET name=?, host=?, port=?, username=?, password=?, private_key=?, group_name=?, device_type=?, description=?
-                WHERE id=?
-            ''', (data['name'], data['host'], data['port'], data['username'], encrypted_password, 
-                  encrypted_private_key, data['group_name'], data['device_type'], data.get('description'), server_id))
+            
+            # 同步更新旧的 device_type 字符串
+            device_type_id = data.get('device_type_id')
+            device_type_str = data.get('device_type', 'linux')
+            if device_type_id:
+                cursor.execute("SELECT value FROM device_types WHERE id = ?", (device_type_id,))
+                row = cursor.fetchone()
+                if row: device_type_str = row[0]
+
+            set_clauses = ["name=?", "host=?", "port=?", "username=?", "group_name=?", "device_type_id=?", "device_type=?", "description=?"]
+            params = [data['name'], data['host'], data['port'], data['username'], data['group_name'], device_type_id, device_type_str, data.get('description')]
+            
+            if data.get('password'):
+                set_clauses.append("password=?")
+                params.append(encrypted_password)
+            if data.get('private_key'):
+                set_clauses.append("private_key=?")
+                params.append(encrypted_private_key)
+            
+            params.append(server_id)
+            sql = f"UPDATE servers SET {', '.join(set_clauses)} WHERE id=?"
+            cursor.execute(sql, tuple(params))
             conn.commit()
 
     def delete_server(self, server_id):
@@ -338,6 +416,18 @@ class Database:
             cursor.execute('UPDATE roles SET is_active = 1 WHERE id = ?', (role_id,))
             conn.commit()
 
+    def update_device_type_role_bindings(self, role_id, device_type_ids):
+        """更新设备类型与角色的绑定关系"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 1. 先将原先绑定该角色的所有类型解绑
+            cursor.execute('UPDATE device_types SET role_id = NULL WHERE role_id = ?', (role_id,))
+            # 2. 绑定新的类型
+            if device_type_ids:
+                for dt_id in device_type_ids:
+                    cursor.execute('UPDATE device_types SET role_id = ? WHERE id = ?', (role_id, dt_id))
+            conn.commit()
+
     # --- 系统设置操作 ---
     def get_system_settings(self):
         with self._get_connection() as conn:
@@ -412,6 +502,52 @@ class Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('DELETE FROM commands WHERE id = ?', (cmd_id,))
+            conn.commit()
+
+    # --- 设备类型相关 ---
+    def get_all_device_types(self):
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT dt.*, r.name as role_name 
+                FROM device_types dt
+                LEFT JOIN roles r ON dt.role_id = r.id
+                ORDER BY dt.id ASC
+            ''')
+            return [dict(row) for row in cursor.fetchall()]
+
+    def add_device_type(self, data):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO device_types (name, value, icon, role_id)
+                VALUES (?, ?, ?, ?)
+            ''', (data['name'], data['value'], data.get('icon', 'fas fa-microchip'), data.get('role_id')))
+            conn.commit()
+            return cursor.lastrowid
+
+    def update_device_type(self, type_id, data):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE device_types 
+                SET name=?, value=?, icon=?, role_id=?
+                WHERE id=?
+            ''', (data['name'], data['value'], data['icon'], data.get('role_id'), type_id))
+            conn.commit()
+
+    def delete_device_type(self, type_id):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 1. 先找到该类型的 value
+            cursor.execute('SELECT value FROM device_types WHERE id = ?', (type_id,))
+            row = cursor.fetchone()
+            if row:
+                # 2. 将引用该类型的服务器重置为 null 或默认值 (这里假设 ID 为 1 是默认)
+                cursor.execute('UPDATE servers SET device_type_id = NULL WHERE device_type_id = ?', (type_id,))
+                # 3. 删除类型
+                cursor.execute('DELETE FROM device_types WHERE id = ?', (type_id,))
             conn.commit()
 
     # --- 监控历史记录 ---

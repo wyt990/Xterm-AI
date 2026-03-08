@@ -86,6 +86,12 @@ export const api = {
     getLogContent: (file, lines) => request(`/api/logs/content?filename=${file}&lines=${lines}`),
     clearLogs: () => request('/api/logs', { method: 'DELETE' }),
 
+    // 设备类型与绑定
+    getDeviceTypes: () => request('/api/device_types'),
+    addDeviceType: (data) => request('/api/device_types', { method: 'POST', body: JSON.stringify(data) }),
+    updateDeviceType: (id, data) => request(`/api/device_types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteDeviceType: (id) => request(`/api/device_types/${id}`, { method: 'DELETE' }),
+
     // SFTP 核心操作
     sftpList: (serverId, path) => request(`/api/sftp/list?server_id=${serverId}&path=${encodeURIComponent(path)}`),
     sftpRename: (data) => request('/api/sftp/rename', { method: 'POST', body: JSON.stringify(data) }),
