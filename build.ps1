@@ -1,4 +1,8 @@
-# XTerm-AI PowerShell 打包脚本
+﻿# XTerm-AI PowerShell 打包脚本
+# 设置 UTF-8 编码，避免中文乱码
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001 | Out-Null
 
 $VERSION = Get-Content -Path VERSION -TotalCount 1
 Write-Host "📦 正在准备 Windows 打包环境 (版本: v$VERSION)..." -ForegroundColor Cyan
