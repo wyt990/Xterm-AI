@@ -92,6 +92,9 @@ export const api = {
 
     // 系统设置
     getSettings: () => request('/api/system_settings'),
+    getServerTreeCollapsed: () => request('/api/server_tree_collapsed'),
+    putServerTreeCollapsed: (data) => request('/api/server_tree_collapsed', { method: 'PUT', body: JSON.stringify(data) }),
+
     updateSettings: (data) => request('/api/system_settings', { method: 'POST', body: JSON.stringify(data) }),
     getLogFiles: () => request('/api/logs'),
     getLogContent: (file, lines) => request(`/api/logs/content?filename=${file}&lines=${lines}`),

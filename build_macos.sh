@@ -16,6 +16,7 @@ rm -rf build/ dist/macOS/*.app dist/macOS/*.zip
 # 注意: macOS 下使用冒号 : 作为路径分隔符
 echo "🏗️ 正在使用 PyInstaller 编译项目..."
 pyinstaller --noconsole --onefile \
+    --icon "static/terminal.png" \
     --name "XTerm-AI-macOS" \
     --add-data "frontend:frontend" \
     --add-data "static:static" \

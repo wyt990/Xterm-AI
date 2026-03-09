@@ -16,6 +16,7 @@ rm -rf build/ dist/linux/*.run dist/linux/*.zip
 # 注意: Linux 下使用冒号 : 作为路径分隔符
 echo "🏗️ 正在使用 PyInstaller 编译项目..."
 pyinstaller --noconsole --onefile \
+    --icon "static/terminal.png" \
     --name "XTerm-AI-Linux" \
     --add-data "frontend:frontend" \
     --add-data "static:static" \

@@ -179,15 +179,18 @@ if __name__ == '__main__':
     time.sleep(1.5)
     _startup_log("等待 1.5s 后创建 WebView 窗口")
     
-    # 创建桌面窗口
+    # 创建桌面窗口（图标路径：打包时在 _MEIPASS，开发时为项目根）
+    _icon = os.path.join(sys._MEIPASS, 'static', 'terminal.png') if hasattr(sys, '_MEIPASS') else os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'terminal.png')
     _log("[~] 正在创建桌面窗口...")
     window = webview.create_window(
-        'XTerm-AI 智能运维终端', 
+        'XTerm-AI 智能运维终端',
         f'http://127.0.0.1:{port}/frontend/index.html',
         width=1280,
         height=800,
         min_size=(1024, 768)
     )
-    
-    # 启动 GUI（private_mode=False 保留 localStorage，避免登录后 token 被清除导致反复要求输入密码）
-    webview.start(private_mode=False)
+    # 启动 GUI（icon: Linux 窗口图标；Windows/macOS 主要依赖 PyInstaller --icon 内嵌到 exe）
+    kw = {'private_mode': False}
+    if os.path.exists(_icon):
+        kw['icon'] = _icon
+    webview.start(**kw)

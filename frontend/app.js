@@ -354,8 +354,13 @@ async function loadServers() {
             });
         });
 
-        // ── 2. 读取折叠记忆（key: 路径字符串 → true=折叠） ─────────
-        const collapsed = storage.get('server_tree_collapsed', {});
+        // ── 2. 从数据库读取折叠状态（打包后端口变化时 localStorage 会失效，故存数据库）
+        let collapsed = {};
+        try {
+            collapsed = await api.getServerTreeCollapsed() || {};
+        } catch (e) {
+            collapsed = storage.get('server_tree_collapsed', {});
+        }
 
         // ── 3. 统计节点下的服务器总数（含子层） ───────────────────
         function countTotal(node) {
@@ -388,9 +393,10 @@ async function loadServers() {
                 const nowCollapsed = nodeEl.classList.contains('collapsed');
                 header.querySelector('.tree-folder-icon').className =
                     `fas ${nowCollapsed ? 'fa-folder' : 'fa-folder-open'} tree-folder-icon`;
-                const col = storage.get('server_tree_collapsed', {});
-                if (nowCollapsed) { col[path] = true; } else { delete col[path]; }
-                storage.set('server_tree_collapsed', col);
+                if (nowCollapsed) { collapsed[path] = true; } else { delete collapsed[path]; }
+                api.putServerTreeCollapsed({ ...collapsed }).catch(() =>
+                    storage.set('server_tree_collapsed', collapsed)
+                );
             };
             nodeEl.appendChild(header);
 

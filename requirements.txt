@@ -15,3 +15,4 @@ cryptography
 dotenv
 paramiko
 httpx
+pillow

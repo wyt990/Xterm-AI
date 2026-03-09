@@ -5,7 +5,7 @@ set /p VERSION=<VERSION
 echo 📦 正在准备 Windows 打包环境 (版本: v%VERSION%)...
 
 REM 1. 安装依赖
-pip install pyinstaller pywebview uvicorn fastapi
+pip install pyinstaller pywebview uvicorn fastapi pillow
 
 REM 2. 清理旧数据
 if exist build rmdir /s /q build
@@ -15,6 +15,7 @@ REM 3. 执行 PyInstaller 打包
 REM 注意: Windows 下使用分号 ; 作为路径分隔符
 echo 🏗️ 正在使用 PyInstaller 编译项目...
 pyinstaller --noconsole --onefile ^
+    --icon "static/terminal.png" ^
     --name "XTerm-AI-Windows" ^
     --add-data "frontend;frontend" ^
     --add-data "static;static" ^

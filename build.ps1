@@ -9,7 +9,7 @@ Write-Host "📦 正在准备 Windows 打包环境 (版本: v$VERSION)..." -Fore
 
 # 1. 卸载冲突的 jwt 包（python-jwt 与 PyJWT 冲突，需用 PyJWT）
 pip uninstall jwt -y 2>$null
-& pip install -r requirements.txt pyinstaller pywebview
+& pip install -r requirements.txt pyinstaller pywebview pillow
 
 # 2. 清理旧数据
 if (Test-Path build) { Remove-Item -Recurse -Force build }
@@ -18,6 +18,7 @@ if (Test-Path dist) { Remove-Item -Recurse -Force dist }
 # 3. 执行 PyInstaller 打包 (Windows 分号分隔符)
 Write-Host "🏗️ 正在使用 PyInstaller 编译项目..." -ForegroundColor Yellow
 & pyinstaller --noconsole --onefile `
+    --icon "static/terminal.png" `
     --name "XTerm-AI-Windows" `
     --add-data "frontend;frontend" `
     --add-data "static;static" `

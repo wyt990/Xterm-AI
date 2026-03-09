@@ -24,6 +24,7 @@ case "$OS_TYPE" in
         # 类似 Linux 的脚本，但输出后缀为 .app
         pip install pyinstaller pywebview uvicorn fastapi
         pyinstaller --noconsole --onefile \
+            --icon "static/terminal.png" \
             --name "XTerm-AI-macOS" \
             --add-data "frontend:frontend" \
             --add-data "static:static" \

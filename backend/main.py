@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Depends, status, Request
+﻿from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Depends, status, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -524,6 +524,21 @@ async def delete_role(role_id: int):
 async def activate_role(role_id: int):
     db.set_active_role(role_id)
     app_logger.info("角色管理", f"激活角色 ID: {role_id}")
+    return {"status": "success"}
+
+# --- 服务器分组折叠状态（存数据库，打包后端口变化时仍可持久化）---
+@app.get("/api/server_tree_collapsed", dependencies=[Depends(verify_token)])
+async def get_server_tree_collapsed():
+    s = db.get_system_settings()
+    raw = s.get("server_tree_collapsed", "{}")
+    try:
+        return json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        return {}
+
+@app.put("/api/server_tree_collapsed", dependencies=[Depends(verify_token)])
+async def put_server_tree_collapsed(data: dict):
+    db.upsert_system_setting("server_tree_collapsed", json.dumps(data))
     return {"status": "success"}
 
 # --- 系统设置 API ---
