@@ -29,8 +29,13 @@ class Database:
         if not encrypted_text: return None
         try:
             return self.fernet.decrypt(encrypted_text.encode()).decode()
-        except Exception:
-            # 如果解密失败（可能是旧的明文数据），原样返回，由迁移脚本处理
+        except Exception as e:
+            # 解密失败：可能是明文、错误密钥、或损坏数据。原样返回以便调用方使用。
+            try:
+                from logger import app_logger
+                app_logger.info("数据库", f"解密失败(将使用原值): {type(e).__name__}")
+            except Exception:
+                pass
             return encrypted_text
 
     def _get_connection(self):

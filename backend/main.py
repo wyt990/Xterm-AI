@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Depends, status, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Depends, status, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -169,7 +169,7 @@ def _get_ssh_config(server_info):
         "host": server_info["host"],
         "port": server_info["port"],
         "username": server_info["username"],
-        "password": server_info["password"],
+        "password": server_info.get("password"),
         "private_key": server_info.get("private_key"),
     }
     proxy = _get_terminal_proxy()
@@ -348,6 +348,7 @@ async def update_server_doc(server_id: int, body: ServerDocModel):
 
 @app.post("/api/servers/test", dependencies=[Depends(verify_token)])
 async def test_server_connection(server: ServerTestModel):
+    app_logger.info("SSH测试", f"收到测试请求: host={server.host} port={server.port} user={server.username} auth={'key' if server.private_key else 'pwd'}")
     test_config = {
         "host": server.host,
         "port": server.port,
@@ -358,11 +359,16 @@ async def test_server_connection(server: ServerTestModel):
     proxy = _get_terminal_proxy()
     if proxy:
         test_config["proxy"] = proxy
+        app_logger.info("SSH测试", f"使用终端代理: {proxy.get('type')} {proxy.get('host')}:{proxy.get('port')}")
+    else:
+        app_logger.info("SSH测试", "无代理，直连")
     ssh = SSHHandler(**test_config)
     if ssh.connect():
         ssh.close()
+        app_logger.info("SSH测试", f"测试成功: {server.host}:{server.port}")
         return {"success": True, "message": "连接成功"}
     else:
+        app_logger.info("SSH测试", f"测试失败: {server.host}:{server.port}（详见上方 SSH 连接日志）")
         return {"success": False, "message": "连接失败，请检查主机、端口、账号或密码是否正确"}
 
 # --- AI 配置管理 API ---
@@ -887,22 +893,32 @@ async def delete_command(cmd_id: int):
 # --- WebSocket 终端连接 ---
 @app.websocket("/ws/ssh/{server_id}")
 async def ssh_endpoint(websocket: WebSocket, server_id: int):
+    app_logger.info("终端连接", f"WebSocket 请求 server_id={server_id}")
     if not await verify_ws_token(websocket):
+        app_logger.info("终端连接", "Token 验证失败")
         await websocket.accept()
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     await websocket.accept()
     server_info = db.get_server_by_id(server_id)
     if not server_info:
+        app_logger.info("终端连接", f"server_id={server_id} 不存在")
         await websocket.send_text("Server not found in database!")
         await websocket.close()
         return
 
-    ssh = SSHHandler(**_get_ssh_config(server_info))
+    cfg = _get_ssh_config(server_info)
+    auth = "key" if cfg.get("private_key") else ("pwd" if cfg.get("password") else "无认证")
+    if not cfg.get("private_key") and not cfg.get("password"):
+        app_logger.info("终端连接", f"警告: 密码为空，可能解密失败。host={cfg['host']}")
+    app_logger.info("终端连接", f"磁贴连接: name={server_info.get('name')} host={cfg['host']} port={cfg['port']} user={cfg['username']} auth={auth} proxy={bool(cfg.get('proxy'))}")
+    ssh = SSHHandler(**cfg)
     if not ssh.connect():
+        app_logger.info("终端连接", f"磁贴连接失败: {server_info.get('name')}（详见上方 SSH 连接日志）")
         await websocket.send_text(f"SSH Connection to {server_info['name']} Failed!")
         await websocket.close()
         return
+    app_logger.info("终端连接", f"磁贴连接成功: {server_info.get('name')}")
 
     async def forward_to_client():
         try:
@@ -982,6 +998,11 @@ async def ai_endpoint(
 * 你必须使用该厂商特有的 CLI 命令（如 `display current-configuration`, `show version` 等）。
 * 每一行命令必须符合网络设备的交互逻辑。
 * 分页处理：display/show 类命令会分页，助手会自动翻页获取完整输出；可直接使用单条 display/show 命令。
+
+* 【视图与提示符 - 必须遵守】：
+  - H3C/华为/锐捷(VRP/Comware)：用户视图提示符为尖括号如 <H3C>、<Huawei>，只能执行 display、ping、tracert 等只读命令；系统视图提示符为方括号如 [H3C]、[Huawei]，才能执行 interface、vlan、ip address、acl 等配置命令。执行任何配置命令前，若当前提示符为尖括号 <xxx>，必须先发送 `system-view` 进入系统视图。
+  - Cisco(IOS)：用户模式提示符为 `>`, 特权模式为 `#`, 全局配置模式为 `(config)#`。配置命令需在 config 模式下执行。若提示符为 `>` 需先 `enable`，若为 `#` 且要配置需 `configure terminal`。
+  - 请根据终端输出中的提示符判断当前视图；在用户视图/用户模式下直接发配置命令会失败，必须先进入系统视图或配置模式。
 """
     elif dt_lower == "linux":
         env_constraints += """

@@ -575,7 +575,11 @@ export async function testSSHFromModal(e) {
     notify("正在测试 SSH 连接...", "info");
     try {
         const res = await api.testServer(data);
-        notify("连接测试成功！", "success");
+        if (res && res.success) {
+            notify("连接测试成功！", "success");
+        } else {
+            notify(res?.message || "连接失败", "error");
+        }
     } catch (err) {
         notify(`连接失败: ${err.message}`, "error");
     } finally {
@@ -637,8 +641,12 @@ async function testAIFromModal(e) {
     setBtnLoading(btn, true);
     notify("正在测试 AI 连接...", "info");
     try {
-        await api.testAI(data);
-        notify("AI 连接测试成功！", "success");
+        const res = await api.testAI(data);
+        if (res && res.success) {
+            notify("AI 连接测试成功！", "success");
+        } else {
+            notify(res?.message || "连接失败", "error");
+        }
     } catch (err) {
         notify(`连接失败: ${err.message}`, "error");
     } finally {
