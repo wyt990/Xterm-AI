@@ -1047,10 +1047,6 @@ async def ai_endpoint(
             else:
                 ai.system_prompt = base + "\n(注意：当前处于 Ask 模式，请仅通过文本回答，不要要求执行任何 Shell 命令。)"
 
-            # 日志记录 AI 请求
-            user_msg = messages[-1]["content"] if messages else ""
-            app_logger.info("AI 对话", f"模式: {mode}, 用户提问: {user_msg[:100]}...")
-
             full_response = ""
             async for chunk in ai.get_response_stream(messages):
                 full_response += chunk
@@ -1075,11 +1071,19 @@ async def stats_endpoint(websocket: WebSocket, server_id: int):
     await websocket.accept()
     server_info = db.get_server_by_id(server_id)
     if not server_info:
-        await websocket.close(); return
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+        return
 
     ssh = SSHHandler(**_get_ssh_config(server_info))
     if not ssh.connect():
-        await websocket.close(); return
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+        return
 
     try:
         while True:
@@ -1121,8 +1125,10 @@ async def stats_endpoint(websocket: WebSocket, server_id: int):
                     print(f"Error saving stats history: {e}")
             
             await asyncio.sleep(5)  # 每 5 秒更新一次
-    except Exception:
+    except WebSocketDisconnect:
         pass
+    except Exception as e:
+        app_logger.warning("状态采集", f"WebSocket 异常: {e}")
     finally:
         ssh.close()
 

@@ -95,7 +95,12 @@ class AIHandler:
                                 break
                             try:
                                 json_data = json.loads(line[6:])
-                                content = json_data.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                choices = json_data.get('choices')
+                                if choices is None:
+                                    choices = []
+                                item = choices[0] if len(choices) > 0 else {}
+                                delta = item.get('delta') or {}
+                                content = delta.get('content', '') or ''
                                 if content:
                                     yield content
                             except Exception as e:
