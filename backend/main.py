@@ -14,8 +14,13 @@ import jwt
 import stat
 from datetime import datetime, timedelta
 from pathlib import Path
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from ssh_handler import SSHHandler
+
+# 兼容 PyInstaller 打包：使用 main_desktop 注入的路径
+_BASE_DIR = os.getenv("BUNDLE_PATH") or os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+_ENV_PATH = os.getenv("ENV_PATH")
 from ai_handler import AIHandler
 from database import Database
 from logger import app_logger
@@ -27,20 +32,67 @@ from skill_store import (
 )
 from translation import translate_to_chinese as do_translate
 
-# 加载配置
-load_dotenv(dotenv_path="../.env")
+# 加载配置（打包模式用 ENV_PATH，开发模式用 ../.env）
+if _ENV_PATH and os.path.exists(_ENV_PATH):
+    load_dotenv(dotenv_path=_ENV_PATH)
+else:
+    load_dotenv(dotenv_path=os.path.join(_BASE_DIR, ".env"))
 
 JWT_SECRET = os.getenv("JWT_SECRET", "xterm_secret_key_999")
 JWT_ALGORITHM = "HS256"
 APP_PASSWORD = os.getenv("APP_PASSWORD", "admin")
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app):
+    """应用启动时写入日志，确保 xterm.log 被创建"""
+    try:
+        from logger import app_logger
+        port = os.getenv("SERVER_PORT", "?")
+        app_logger.info("系统", f"后端服务已启动，端口 {port}")
+        app_logger.info("系统", f"JWT_SECRET 已加载: {'是' if JWT_SECRET else '否'}, APP_PASSWORD 已设置: {'是' if APP_PASSWORD else '否'}")
+        app_logger.info("系统", f"ENV_PATH={_ENV_PATH}, DB_PATH={os.getenv('DB_PATH', '?')}")
+        try:
+            _dp = os.getenv("DB_PATH") or ""
+            app_logger.info("系统", f"数据库文件存在: {os.path.exists(_dp)}")
+        except Exception:
+            pass
+    except Exception:
+        pass
+    yield
+
+app = FastAPI(lifespan=lifespan)
 security = HTTPBearer()
+
+@app.middleware("http")
+async def log_api_requests(request: Request, call_next):
+    """记录关键请求：页面加载、所有 API，便于诊断前后端是否连通"""
+    path = request.url.path
+    is_api = path.startswith("/api/")
+    is_page = path in ("/", "/frontend/index.html")
+    if not is_api and not is_page:
+        return await call_next(request)
+    try:
+        response = await call_next(request)
+        try:
+            if is_api:
+                code = response.status_code
+                app_logger.info("API", f"{request.method} {path}" + (f" -> {code}" if code >= 400 else ""))
+            else:
+                app_logger.info("系统", f"页面请求: {path} -> {response.status_code}")
+        except Exception:
+            pass
+        return response
+    except HTTPException as e:
+        if is_api:
+            app_logger.info("API", f"{request.method} {path} -> {e.status_code}")
+        raise
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """确保异常统一返回 JSON，避免前端解析 HTML 失败"""
     if isinstance(exc, HTTPException):
+        if exc.status_code in (401, 403):
+            app_logger.info("鉴权", f"[{exc.status_code}] path={request.url.path} detail={exc.detail}")
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     app_logger.info("系统", f"未捕获异常: {exc}")
     return JSONResponse(status_code=500, content={"detail": str(exc) or "服务器内部错误"})
@@ -77,11 +129,26 @@ async def verify_ws_token(websocket: WebSocket):
 class LoginModel(BaseModel):
     password: str
 
+class DebugAuthFailureModel(BaseModel):
+    url: str = ""
+
+@app.get("/api/ping")
+async def ping():
+    """无鉴权：诊断前端能否连通后端"""
+    return {"ok": True}
+
+@app.post("/api/debug/auth_failure")
+async def debug_auth_failure(data: DebugAuthFailureModel):
+    """无鉴权：前端 401 时上报触发路径，便于排查登录循环"""
+    app_logger.info("鉴权", f"[前端上报] 401 来自: {data.url or '?'}")
+
 @app.post("/api/login")
 async def login(data: LoginModel):
     if data.password == APP_PASSWORD:
         token = create_access_token()
+        app_logger.info("鉴权", "登录成功，已颁发 Token")
         return {"access_token": token, "token_type": "bearer"}
+    app_logger.info("鉴权", "登录失败：密码错误")
     raise HTTPException(status_code=401, detail="密码错误")
 
 # 数据库实例
@@ -118,13 +185,15 @@ def _get_skills_proxy():
     return db.get_proxy_by_id(pid) if pid else None
 
 
-# 挂载静态文件 (这些不需要鉴权，前端页面本身可以加载)
-app.mount("/frontend", StaticFiles(directory="../frontend"), name="frontend")
-app.mount("/static", StaticFiles(directory="../static"), name="static")
+# 挂载静态文件 (打包时用 _BASE_DIR，确保路径正确)
+_frontend_dir = os.path.join(_BASE_DIR, "frontend")
+_static_dir = os.path.join(_BASE_DIR, "static")
+app.mount("/frontend", StaticFiles(directory=_frontend_dir), name="frontend")
+app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
-    with open("../frontend/index.html", "r", encoding="utf-8") as f:
+    with open(os.path.join(_frontend_dir, "index.html"), "r", encoding="utf-8") as f:
         return f.read()
 
 # 数据模型
@@ -229,7 +298,7 @@ class SftpCreateModel(BaseModel):
 # --- Web 路由 ---
 @app.get("/")
 async def get():
-    with open("../frontend/index.html", "r", encoding='utf-8') as f:
+    with open(os.path.join(_frontend_dir, "index.html"), "r", encoding='utf-8') as f:
         return HTMLResponse(content=f.read())
 
 # --- 服务器管理 API ---
@@ -471,12 +540,19 @@ async def update_system_settings(settings: SystemSettingsModel):
     app_logger.info("系统设置", "更新了日志及系统设置")
     return {"status": "success"}
 
+def _get_log_path():
+    """获取日志目录（打包时用 LOG_PATH，否则用数据库设置）"""
+    p = os.getenv("LOG_PATH")
+    if p:
+        return p
+    settings = db.get_system_settings()
+    p = settings.get("log_path", "../logs")
+    return os.path.normpath(os.path.join(os.path.dirname(__file__), p))
+
 # --- 日志管理 API ---
 @app.get("/api/logs", dependencies=[Depends(verify_token)])
 async def list_logs():
-    settings = db.get_system_settings()
-    log_path = settings.get("log_path", "../logs")
-    abs_log_path = os.path.abspath(os.path.join(os.path.dirname(__file__), log_path))
+    abs_log_path = _get_log_path()
     
     if not os.path.exists(abs_log_path):
         return []
@@ -495,9 +571,7 @@ async def list_logs():
 
 @app.get("/api/logs/content", dependencies=[Depends(verify_token)])
 async def get_log_content(filename: str, lines: int = 500):
-    settings = db.get_system_settings()
-    log_path = settings.get("log_path", "../logs")
-    abs_log_path = os.path.abspath(os.path.join(os.path.dirname(__file__), log_path))
+    abs_log_path = _get_log_path()
     
     # 简单路径安全检查
     if ".." in filename or "/" in filename or "\\" in filename:
@@ -538,9 +612,7 @@ async def get_log_content(filename: str, lines: int = 500):
 
 @app.delete("/api/logs", dependencies=[Depends(verify_token)])
 async def clear_logs():
-    settings = db.get_system_settings()
-    log_path = settings.get("log_path", "../logs")
-    abs_log_path = os.path.abspath(os.path.join(os.path.dirname(__file__), log_path))
+    abs_log_path = _get_log_path()
     
     if not os.path.exists(abs_log_path):
         return {"status": "success"}

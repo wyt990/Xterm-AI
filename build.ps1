@@ -1,4 +1,4 @@
-﻿# XTerm-AI PowerShell 打包脚本
+# XTerm-AI PowerShell 打包脚本
 # 设置 UTF-8 编码，避免中文乱码
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -7,8 +7,9 @@ chcp 65001 | Out-Null
 $VERSION = Get-Content -Path VERSION -TotalCount 1
 Write-Host "📦 正在准备 Windows 打包环境 (版本: v$VERSION)..." -ForegroundColor Cyan
 
-# 1. 安装依赖
-& pip install pyinstaller pywebview uvicorn fastapi
+# 1. 卸载冲突的 jwt 包（python-jwt 与 PyJWT 冲突，需用 PyJWT）
+pip uninstall jwt -y 2>$null
+& pip install -r requirements.txt pyinstaller pywebview
 
 # 2. 清理旧数据
 if (Test-Path build) { Remove-Item -Recurse -Force build }
@@ -22,6 +23,18 @@ Write-Host "🏗️ 正在使用 PyInstaller 编译项目..." -ForegroundColor Y
     --add-data "static;static" `
     --add-data "config;config" `
     --add-data "backend;backend" `
+    --add-data ".env.example;.env.example" `
+    --collect-all "dotenv" `
+    --collect-all "httpx" `
+    --hidden-import "dotenv" `
+    --hidden-import "jwt" `
+    --hidden-import "multipart" `
+    --hidden-import "sqlite3" `
+    --hidden-import "_sqlite3" `
+    --hidden-import "paramiko" `
+    --hidden-import "httpx" `
+    --hidden-import "cryptography" `
+    --hidden-import "cryptography.fernet" `
     --hidden-import "uvicorn.logging" `
     --hidden-import "uvicorn.protocols" `
     --hidden-import "uvicorn.loops" `

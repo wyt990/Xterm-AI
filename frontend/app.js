@@ -20,26 +20,30 @@ window.closeModal = closeModal;
 // 1. 初始化
 async function init() {
     console.log("🚀 XTerm-AI 初始化中...");
-    
+    // 诊断：启动时先 ping 后端，验证 fetch 是否能连通
+    try {
+        const r = await fetch('/api/ping');
+        const data = await r.json();
+        console.log("[init] ping 后端:", data.ok ? "OK" : "fail");
+    } catch (e) {
+        console.error("[init] ping 失败:", e);
+    }
+
     // 1. 先加载所有 HTML 组件 (弹窗等)
     await loadComponents();
     
     // --- 鉴权拦截逻辑 ---
     const token = localStorage.getItem('xterm_token');
-    if (!token) {
-        showModal('login-modal');
-        // 未登录时不再继续执行后续的数据加载
-        return;
-    }
-
-    // 绑定登录表单 (这里保留，以防从 authError 触发)
+    // 先绑定登录表单和 authError 监听，否则未登录时点击登录会走默认表单提交导致整页刷新
     setupLoginForm();
-
-    // 监听全局鉴权错误
     window.addEventListener('authError', () => {
         localStorage.removeItem('xterm_token');
         showModal('login-modal');
     });
+    if (!token) {
+        showModal('login-modal');
+        return;
+    }
     // ------------------
 
     // 2. 只有有 Token 时才初始化模块并加载数据

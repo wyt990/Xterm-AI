@@ -16,16 +16,27 @@ class Logger:
         return cls._instance
 
     def _setup_logger(self):
-        # 暂时使用环境变量或默认值，之后由 main.py 触发动态重载
-        db_path = os.getenv("DB_PATH", "../config/xterm.db")
-        db = Database(db_path)
-        settings = db.get_system_settings()
-        
-        log_enabled = settings.get("log_enabled") == "1"
-        log_path = settings.get("log_path", "../logs")
-        log_max_size = int(settings.get("log_max_size", 10)) * 1024 * 1024
-        log_backup_count = int(settings.get("log_backup_count", 10))
-        log_level_str = settings.get("log_level", "INFO").upper()
+        # 打包模式下 main_desktop 注入 LOG_PATH（exe 同级 logs 目录）
+        log_path = os.getenv("LOG_PATH")
+        if not log_path:
+            db_path = os.getenv("DB_PATH", "../config/xterm.db")
+            db = Database(db_path)
+            settings = db.get_system_settings()
+            log_path = settings.get("log_path", "../logs")
+            log_enabled = settings.get("log_enabled") == "1"
+            log_max_size = int(settings.get("log_max_size", 10)) * 1024 * 1024
+            log_backup_count = int(settings.get("log_backup_count", 10))
+            log_level_str = settings.get("log_level", "INFO").upper()
+        else:
+            log_enabled = True
+            log_max_size = 10 * 1024 * 1024
+            log_backup_count = 10
+            log_level_str = "INFO"
+
+        # 相对路径时，基于 backend 目录解析（开发环境）
+        if log_path and not os.path.isabs(log_path):
+            _base = os.path.dirname(os.path.abspath(__file__))
+            log_path = os.path.normpath(os.path.join(_base, log_path))
         
         # 映射等级
         levels = {
@@ -46,19 +57,30 @@ class Logger:
                 self.logger.removeHandler(handler)
 
         if log_enabled and log_level_str != "OFF":
-            if not os.path.exists(log_path):
-                os.makedirs(log_path, exist_ok=True)
-            
-            log_file = os.path.join(log_path, "xterm.log")
-            handler = RotatingFileHandler(log_file, maxBytes=log_max_size, backupCount=log_backup_count, encoding='utf-8')
-            formatter = logging.Formatter('%(asctime)s [%(levelname)s] [%(name)s] %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-            
-        # 始终添加控制台输出以便调试
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-        self.logger.addHandler(console_handler)
+            try:
+                if not os.path.exists(log_path):
+                    os.makedirs(log_path, exist_ok=True)
+                log_file = os.path.join(log_path, "xterm.log")
+                handler = RotatingFileHandler(log_file, maxBytes=log_max_size, backupCount=log_backup_count, encoding='utf-8')
+                formatter = logging.Formatter('%(asctime)s [%(levelname)s] [%(name)s] %(message)s')
+                handler.setFormatter(formatter)
+                self.logger.addHandler(handler)
+                # 立即写入一条启动日志，确保文件被创建
+                self.logger.info("[xterm_ai] Logger initialized, log_path=%s", log_path)
+            except Exception as e:
+                try:
+                    startup_log = os.path.join(os.getenv("LOG_PATH", log_path or "."), "startup.log")
+                    with open(startup_log, "a", encoding="utf-8") as f:
+                        f.write(f"[Logger] xterm.log 创建失败: {e}\n")
+                except Exception:
+                    pass
+        # 控制台输出（打包 --noconsole 时 stdout 可能不可用，忽略错误）
+        try:
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+            self.logger.addHandler(console_handler)
+        except (ValueError, OSError):
+            pass
 
     def reload(self):
         self._setup_logger()

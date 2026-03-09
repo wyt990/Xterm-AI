@@ -29,6 +29,15 @@ async function request(url, options = {}) {
         });
         
         if (response.status === 401 && url !== '/api/login') {
+            // 上报 401 来源到后端，便于排查登录循环
+            try {
+                fetch('/api/debug/auth_failure', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url }),
+                    keepalive: true
+                }).catch(() => {});
+            } catch (e) {}
             // Token 失效，跳转到登录或显示登录弹窗
             window.dispatchEvent(new CustomEvent('authError'));
             throw new Error('未登录或登录过期');
