@@ -15,6 +15,16 @@ GITHUB_API_BASE = "https://api.github.com"
 REQUEST_TIMEOUT = 15.0
 
 
+def _proxy_url(proxy: Optional[Dict]) -> Optional[str]:
+    """从代理配置构建 httpx 可用的 proxy URL"""
+    if not proxy:
+        return None
+    from proxy_utils import build_proxy_url, should_skip_proxy
+    if should_skip_proxy(proxy, GITHUB_API_BASE):
+        return None
+    return build_proxy_url(proxy) or None
+
+
 def _load_recommended_skills() -> List[Dict]:
     """加载内置推荐技能列表"""
     data_path = Path(__file__).parent / "data" / "recommended_skills.json"
@@ -61,13 +71,14 @@ def _parse_repo(repo_input: str) -> Optional[tuple]:
     return None
 
 
-def _fetch_github_json(url: str, token: Optional[str] = None) -> Optional[Any]:
+def _fetch_github_json(url: str, token: Optional[str] = None, proxy: Optional[Dict] = None) -> Optional[Any]:
     """请求 GitHub API 返回 JSON"""
     headers = {"Accept": "application/vnd.github.v3+json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    proxy_url = _proxy_url(proxy)
     try:
-        with httpx.Client(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+        with httpx.Client(timeout=REQUEST_TIMEOUT, follow_redirects=True, proxy=proxy_url) as client:
             r = client.get(url, headers=headers)
             if r.status_code == 200:
                 return r.json()
@@ -76,19 +87,21 @@ def _fetch_github_json(url: str, token: Optional[str] = None) -> Optional[Any]:
     return None
 
 
-def _fetch_raw(url: str) -> Optional[str]:
+def _fetch_raw(url: str, proxy: Optional[Dict] = None) -> Optional[str]:
     """拉取 raw 文件内容"""
+    proxy_url = _proxy_url(proxy)
     try:
-        with httpx.Client(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+        with httpx.Client(timeout=REQUEST_TIMEOUT, follow_redirects=True, proxy=proxy_url) as client:
             r = client.get(url)
             if r.status_code == 200:
                 return r.text
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[skill_store] _fetch_raw failed: url={url!r} proxy={bool(proxy_url)} err={e!r}")
     return None
 
 
-def list_skills_from_github(repo: str, token: Optional[str] = None) -> List[Dict]:
+def list_skills_from_github(repo: str, token: Optional[str] = None, proxy: Optional[Dict] = None) -> List[Dict]:
     """
     从 GitHub 仓库列出所有技能。
     尝试 .agent-skills、skills、.agents/skills 等目录。
@@ -104,7 +117,7 @@ def list_skills_from_github(repo: str, token: Optional[str] = None) -> List[Dict
         parts = folder.split("/")
         api_path = "/".join(parts)
         url = f"{base_url}/{api_path}?ref={branch}"
-        data = _fetch_github_json(url, token)
+        data = _fetch_github_json(url, token, proxy)
         if not data:
             continue
         items = data if isinstance(data, list) else []
@@ -140,7 +153,7 @@ def _parse_skill_md(content: str) -> tuple:
     return (name, description, body.strip())
 
 
-def fetch_skill_content(source: str, skill_name: str, skill_path: str = ".agent-skills") -> Optional[Dict]:
+def fetch_skill_content(source: str, skill_name: str, skill_path: str = ".agent-skills", proxy: Optional[Dict] = None) -> Optional[Dict]:
     """
     从 GitHub 拉取技能完整内容。
     source: owner/repo
@@ -153,7 +166,7 @@ def fetch_skill_content(source: str, skill_name: str, skill_path: str = ".agent-
     owner, repo_name, branch = parsed
     path_part = f"{skill_path}/{skill_name}" if skill_path else skill_name
     raw_url = f"{GITHUB_RAW_BASE}/{owner}/{repo_name}/{branch}/{path_part}/SKILL.md"
-    text = _fetch_raw(raw_url)
+    text = _fetch_raw(raw_url, proxy)
     if not text:
         return None
     name, description, content = _parse_skill_md(text)
@@ -171,12 +184,13 @@ def install_skill(
     description_zh: Optional[str],
     bound_device_type_ids: List[int],
     db,
+    proxy: Optional[Dict] = None,
 ) -> Optional[int]:
     """
     安装技能：拉取 content，写入数据库，绑定设备类型。
     返回 skill_id 或 None
     """
-    data = fetch_skill_content(source, skill_name, skill_path)
+    data = fetch_skill_content(source, skill_name, skill_path, proxy)
     if not data:
         return None
     existing = db.get_skill_by_name(skill_name)

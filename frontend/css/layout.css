@@ -148,6 +148,13 @@
     flex-shrink: 0;
 }
 
+/* 设置类视图的可滚动内容区（系统设置、模型设置、角色、技能等）*/
+.view .settings-container {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 /* 分隔线 Resizer */
 .resizer {
     width: 4px;

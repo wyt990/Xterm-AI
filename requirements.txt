@@ -2,10 +2,13 @@ fastapi
 uvicorn
 websockets
 paramiko
-httpx
+pysocks
+httpx[socks]
 python-dotenv
 pydantic
 pydantic-settings
 jinja2
 pyyaml
 python-multipart
+pyjwt
+cryptography

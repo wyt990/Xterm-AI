@@ -3,11 +3,21 @@ import json
 import os
 
 class AIHandler:
-    def __init__(self, api_key, base_url, model, system_prompt):
+    def __init__(self, api_key, base_url, model, system_prompt, proxy=None):
         self.api_key = api_key
         self.base_url = base_url.rstrip('/')
         self.model = model
         self.system_prompt = system_prompt
+        self.proxy = proxy  # 代理 dict 或 None，用于 AI API 请求
+
+    def _proxy_url(self):
+        """构造代理 URL，若应跳过（ignore_local）或未配置则返回 None"""
+        if not self.proxy:
+            return None
+        from proxy_utils import build_proxy_url, should_skip_proxy
+        if should_skip_proxy(self.proxy, self.base_url):
+            return None
+        return build_proxy_url(self.proxy) or None
 
     async def test_connection(self):
         """测试 AI 端点连接性"""
@@ -15,14 +25,14 @@ class AIHandler:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
-        # 发送一个极其简短的请求来验证
         data = {
             "model": self.model,
             "messages": [{"role": "user", "content": "hi"}],
             "max_tokens": 1
         }
+        proxy_url = self._proxy_url()
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, proxy=proxy_url) as client:
                 url = f"{self.base_url}/chat/completions"
                 response = await client.post(url, headers=headers, json=data)
                 if response.status_code == 200:
@@ -55,8 +65,9 @@ class AIHandler:
             "stream": True
         }
         
+        proxy_url = self._proxy_url()
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=60.0, proxy=proxy_url) as client:
                 async with client.stream("POST", f"{self.base_url}/chat/completions", headers=headers, json=data) as response:
                     async for line in response.aiter_lines():
                         if line.startswith("data: "):

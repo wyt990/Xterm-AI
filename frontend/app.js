@@ -208,6 +208,9 @@ function initNavigation() {
                 })();
             } else if (viewId === 'model-settings-view') {
                 settings.loadAIEndpoints();
+            } else if (viewId === 'settings-view') {
+                loadSystemSettings();
+                settings.loadProxies?.();
             }
         };
     });

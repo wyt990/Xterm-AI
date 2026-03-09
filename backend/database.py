@@ -204,6 +204,29 @@ class Database:
                 for tid, val in types:
                     cursor.execute("UPDATE servers SET device_type_id = ? WHERE device_type = ?", (tid, val))
             
+            # 11. 代理表 (proxy 功能 Phase 1)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS proxies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    host TEXT NOT NULL,
+                    port INTEGER NOT NULL,
+                    username TEXT,
+                    password TEXT,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_proxies_name ON proxies(name)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_proxies_type ON proxies(type)')
+            # 迁移：proxies 表增加 ignore_local 列（忽略本地/局域网连接）
+            cursor.execute("PRAGMA table_info(proxies)")
+            proxy_cols = [c[1] for c in cursor.fetchall()]
+            if 'ignore_local' not in proxy_cols:
+                cursor.execute("ALTER TABLE proxies ADD COLUMN ignore_local INTEGER DEFAULT 0")
+
             # 初始化默认设置
             default_settings = {
                 "log_enabled": "1",
@@ -211,7 +234,10 @@ class Database:
                 "log_max_size": "10",
                 "log_backup_count": "10",
                 "log_level": "INFO",
-                "skills_enabled": "1"
+                "skills_enabled": "1",
+                "proxy_for_terminal": "",
+                "proxy_for_ai": "",
+                "proxy_for_skills": "",
             }
             for k, v in default_settings.items():
                 cursor.execute('INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)', (k, v))
@@ -520,6 +546,119 @@ class Database:
             cursor = conn.cursor()
             cursor.execute('UPDATE system_settings SET value = ? WHERE key = ?', (value, key))
             conn.commit()
+
+    def upsert_system_setting(self, key, value):
+        """插入或更新系统设置（用于 proxy_bindings 等可能不存在的 key）"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)',
+                (key, str(value) if value is not None else '')
+            )
+            conn.commit()
+
+    # --- 代理相关操作 ---
+    def get_all_proxies(self):
+        """获取所有代理，密码解密后返回（API 需脱敏展示）"""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM proxies ORDER BY created_at DESC')
+            rows = [dict(row) for row in cursor.fetchall()]
+            for r in rows:
+                r['password'] = self._decrypt(r.get('password'))
+            return rows
+
+    def get_proxy_by_id(self, proxy_id):
+        """获取单个代理，密码解密"""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM proxies WHERE id = ?', (proxy_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            res['password'] = self._decrypt(res.get('password'))
+            return res
+
+    def add_proxy(self, data):
+        """新增代理，密码加密存储"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            encrypted_password = self._encrypt(data.get('password'))
+            ignore_local = 1 if data.get('ignore_local') else 0
+            cursor.execute('''
+                INSERT INTO proxies (name, type, host, port, username, password, description, ignore_local)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                data['name'],
+                data['type'],
+                data['host'],
+                data['port'],
+                data.get('username'),
+                encrypted_password,
+                data.get('description'),
+                ignore_local,
+            ))
+            conn.commit()
+            return cursor.lastrowid
+
+    def update_proxy(self, proxy_id, data):
+        """更新代理，password 为占位符 ******** 或空时不更新"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            ignore_local = 1 if data.get('ignore_local') else 0
+            set_clauses = ["name=?", "type=?", "host=?", "port=?", "username=?", "description=?", "ignore_local=?", "updated_at=CURRENT_TIMESTAMP"]
+            params = [data['name'], data['type'], data['host'], data['port'], data.get('username'), data.get('description'), ignore_local]
+            pw = data.get('password')
+            if pw and pw != "********":
+                set_clauses.append("password=?")
+                params.append(self._encrypt(pw))
+            params.append(proxy_id)
+            cursor.execute(f"UPDATE proxies SET {', '.join(set_clauses)} WHERE id=?", tuple(params))
+            conn.commit()
+
+    def delete_proxy(self, proxy_id):
+        """删除代理，并清除相关绑定"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 清除引用此代理的绑定
+            settings = self.get_system_settings()
+            for key in ['proxy_for_terminal', 'proxy_for_ai', 'proxy_for_skills']:
+                if str(settings.get(key, '')) == str(proxy_id):
+                    cursor.execute('UPDATE system_settings SET value = ? WHERE key = ?', ('', key))
+            cursor.execute('DELETE FROM proxies WHERE id = ?', (proxy_id,))
+            conn.commit()
+
+    def get_proxy_bindings(self):
+        """获取场景绑定：{ terminal: proxy_id, ai: proxy_id, skills: proxy_id }"""
+        settings = self.get_system_settings()
+        def _to_id(v):
+            if not v or v == '0':
+                return None
+            try:
+                return int(v)
+            except (ValueError, TypeError):
+                return None
+        return {
+            'terminal': _to_id(settings.get('proxy_for_terminal')),
+            'ai': _to_id(settings.get('proxy_for_ai')),
+            'skills': _to_id(settings.get('proxy_for_skills')),
+        }
+
+    def update_proxy_bindings(self, terminal=None, ai=None, skills=None):
+        """更新场景绑定，None/0 表示不绑定"""
+        def _to_val(x):
+            if x is None or x == 0:
+                return ''
+            return str(int(x))
+        if terminal is not None:
+            self.upsert_system_setting('proxy_for_terminal', _to_val(terminal))
+        if ai is not None:
+            self.upsert_system_setting('proxy_for_ai', _to_val(ai))
+        if skills is not None:
+            self.upsert_system_setting('proxy_for_skills', _to_val(skills))
 
     # --- 命令分组相关操作 ---
     def get_all_command_groups(self):

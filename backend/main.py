@@ -87,6 +87,36 @@ async def login(data: LoginModel):
 db_path = os.getenv("DB_PATH", "../config/xterm.db")
 db = Database(db_path)
 
+
+def _get_terminal_proxy():
+    """获取终端场景绑定的代理配置，无则返回 None"""
+    bindings = db.get_proxy_bindings()
+    pid = bindings.get("terminal")
+    return db.get_proxy_by_id(pid) if pid else None
+
+
+def _get_ssh_config(server_info):
+    """构建 SSHHandler 所需 config，含终端代理（若已绑定）"""
+    cfg = {
+        "host": server_info["host"],
+        "port": server_info["port"],
+        "username": server_info["username"],
+        "password": server_info["password"],
+        "private_key": server_info.get("private_key"),
+    }
+    proxy = _get_terminal_proxy()
+    if proxy:
+        cfg["proxy"] = proxy
+    return cfg
+
+
+def _get_skills_proxy():
+    """获取技能场景绑定的代理配置"""
+    bindings = db.get_proxy_bindings()
+    pid = bindings.get("skills")
+    return db.get_proxy_by_id(pid) if pid else None
+
+
 # 挂载静态文件 (这些不需要鉴权，前端页面本身可以加载)
 app.mount("/frontend", StaticFiles(directory="../frontend"), name="frontend")
 app.mount("/static", StaticFiles(directory="../static"), name="static")
@@ -128,6 +158,21 @@ class AITestModel(BaseModel):
     api_key: str
     base_url: str
     model: str
+
+class ProxyModel(BaseModel):
+    name: str
+    type: str  # http | socks5
+    host: str
+    port: int
+    username: Optional[str] = None
+    password: Optional[str] = None
+    description: Optional[str] = None
+    ignore_local: bool = False  # 勾选时，访问本地/局域网 IP 时不使用代理
+
+class ProxyBindingsModel(BaseModel):
+    terminal: Optional[int] = None
+    ai: Optional[int] = None
+    skills: Optional[int] = None
 
 class SystemSettingsModel(BaseModel):
     log_enabled: str
@@ -233,13 +278,17 @@ async def update_server_doc(server_id: int, body: ServerDocModel):
 
 @app.post("/api/servers/test", dependencies=[Depends(verify_token)])
 async def test_server_connection(server: ServerTestModel):
-    ssh = SSHHandler(
-        host=server.host,
-        port=server.port,
-        username=server.username,
-        password=server.password,
-        private_key=server.private_key
-    )
+    test_config = {
+        "host": server.host,
+        "port": server.port,
+        "username": server.username,
+        "password": server.password,
+        "private_key": server.private_key,
+    }
+    proxy = _get_terminal_proxy()
+    if proxy:
+        test_config["proxy"] = proxy
+    ssh = SSHHandler(**test_config)
     if ssh.connect():
         ssh.close()
         return {"success": True, "message": "连接成功"}
@@ -283,6 +332,67 @@ async def delete_ai(ai_id: int):
     db.delete_ai_endpoint(ai_id)
     return {"status": "success"}
 
+# --- 代理管理 API ---
+def _mask_proxy_password(p):
+    """API 返回时密码脱敏"""
+    if not p:
+        return p
+    d = dict(p)
+    if d.get('password'):
+        d['password'] = "********"
+    return d
+
+@app.get("/api/proxies", dependencies=[Depends(verify_token)])
+async def list_proxies():
+    proxies = db.get_all_proxies()
+    return [_mask_proxy_password(p) for p in proxies]
+
+@app.get("/api/proxies/{proxy_id}", dependencies=[Depends(verify_token)])
+async def get_proxy(proxy_id: int):
+    p = db.get_proxy_by_id(proxy_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    return _mask_proxy_password(p)
+
+@app.post("/api/proxies", dependencies=[Depends(verify_token)])
+async def add_proxy(proxy: ProxyModel):
+    data = proxy.model_dump()
+    if data['type'] not in ('http', 'socks5'):
+        raise HTTPException(status_code=400, detail="type must be 'http' or 'socks5'")
+    proxy_id = db.add_proxy(data)
+    return {"id": proxy_id, "status": "success"}
+
+@app.put("/api/proxies/{proxy_id}", dependencies=[Depends(verify_token)])
+async def update_proxy(proxy_id: int, proxy: ProxyModel):
+    if not db.get_proxy_by_id(proxy_id):
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    data = proxy.model_dump()
+    if data['type'] not in ('http', 'socks5'):
+        raise HTTPException(status_code=400, detail="type must be 'http' or 'socks5'")
+    db.update_proxy(proxy_id, data)
+    return {"status": "success"}
+
+@app.delete("/api/proxies/{proxy_id}", dependencies=[Depends(verify_token)])
+async def delete_proxy(proxy_id: int):
+    if not db.get_proxy_by_id(proxy_id):
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    db.delete_proxy(proxy_id)
+    return {"status": "success"}
+
+@app.get("/api/proxy_bindings", dependencies=[Depends(verify_token)])
+async def get_proxy_bindings():
+    return db.get_proxy_bindings()
+
+@app.post("/api/proxy_bindings", dependencies=[Depends(verify_token)])
+async def update_proxy_bindings(bindings: ProxyBindingsModel):
+    data = bindings.model_dump()
+    db.update_proxy_bindings(
+        terminal=data.get('terminal'),
+        ai=data.get('ai'),
+        skills=data.get('skills'),
+    )
+    return {"status": "success"}
+
 @app.post("/api/ai_endpoints/{ai_id}/activate", dependencies=[Depends(verify_token)])
 async def activate_ai(ai_id: int):
     db.set_active_ai(ai_id)
@@ -290,7 +400,11 @@ async def activate_ai(ai_id: int):
 
 @app.post("/api/ai_endpoints/test", dependencies=[Depends(verify_token)])
 async def test_ai(ai: AITestModel):
-    handler = AIHandler(ai.api_key, ai.base_url, ai.model, "")
+    proxy = None
+    bindings = db.get_proxy_bindings()
+    if bindings.get("ai"):
+        proxy = db.get_proxy_by_id(bindings["ai"])
+    handler = AIHandler(ai.api_key, ai.base_url, ai.model, "", proxy=proxy)
     success, message = await handler.test_connection()
     return {"success": success, "message": message}
 
@@ -545,7 +659,8 @@ async def skill_store_recommended(q: Optional[str] = ""):
 @app.get("/api/skill_store/list", dependencies=[Depends(verify_token)])
 async def skill_store_list(repo: str, token: Optional[str] = None):
     """从 GitHub 仓库列出技能"""
-    skills = list_skills_from_github(repo, token=token)
+    proxy = _get_skills_proxy()
+    skills = list_skills_from_github(repo, token=token, proxy=proxy)
     return skills
 
 class SkillInstallModel(BaseModel):
@@ -558,6 +673,7 @@ class SkillInstallModel(BaseModel):
 @app.post("/api/skill_store/install", dependencies=[Depends(verify_token)])
 async def skill_store_install(install: SkillInstallModel):
     """安装技能（从 GitHub 拉取并写入数据库）"""
+    proxy = _get_skills_proxy()
     skill_id = do_install_skill(
         source=install.source,
         skill_name=install.skill_name,
@@ -565,9 +681,13 @@ async def skill_store_install(install: SkillInstallModel):
         description_zh=install.description_zh,
         bound_device_type_ids=install.bound_device_type_ids,
         db=db,
+        proxy=proxy,
     )
     if skill_id is None:
-        raise HTTPException(status_code=502, detail="安装失败：无法拉取技能内容，请检查源地址或网络")
+        raise HTTPException(
+            status_code=502,
+            detail="安装失败：无法拉取技能内容，请检查源地址或网络。若已配置技能代理，请确认代理能访问 raw.githubusercontent.com",
+        )
     app_logger.info("技能管理", f"从商店安装技能: {install.skill_name}")
     return {"id": skill_id, "status": "success"}
 
@@ -580,7 +700,11 @@ async def translate_text(model: TranslateModel):
     ai_handler = None
     ai = db.get_active_ai_endpoint()
     if ai:
-        ai_handler = AIHandler(ai["api_key"], ai["base_url"], ai["model"], "")
+        proxy = None
+        bindings = db.get_proxy_bindings()
+        if bindings.get("ai"):
+            proxy = db.get_proxy_by_id(bindings["ai"])
+        ai_handler = AIHandler(ai["api_key"], ai["base_url"], ai["model"], "", proxy=proxy)
     translation, message = await do_translate(model.text, ai_handler)
     if translation:
         return {"translation": translation}
@@ -601,7 +725,8 @@ async def refresh_skill(skill_id: int):
         raise HTTPException(status_code=400, detail="无效的远程源格式")
     skill_name = skill.get("name") or ""
     skill_path = skill.get("skill_path") or ".agent-skills"
-    data = fetch_skill_content(source_url, skill_name, skill_path)
+    proxy = _get_skills_proxy()
+    data = fetch_skill_content(source_url, skill_name, skill_path, proxy)
     if not data:
         raise HTTPException(status_code=502, detail="无法从远程拉取技能内容，请检查网络或源地址")
     merged = {**skill, "display_name": data["name"], "description": data["description"], "content": data["content"]}
@@ -657,14 +782,7 @@ async def ssh_endpoint(websocket: WebSocket, server_id: int):
         await websocket.close()
         return
 
-    ssh_config = {
-        "host": server_info["host"],
-        "port": server_info["port"],
-        "username": server_info["username"],
-        "password": server_info["password"]
-    }
-    
-    ssh = SSHHandler(**ssh_config)
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     if not ssh.connect():
         await websocket.send_text(f"SSH Connection to {server_info['name']} Failed!")
         await websocket.close()
@@ -859,9 +977,14 @@ async def ai_endpoint(
         "api_key": ai_info["api_key"] if ai_info else os.getenv("AI_API_KEY"),
         "base_url": ai_info["base_url"] if ai_info else os.getenv("AI_BASE_URL"),
         "model": ai_info["model"] if ai_info else os.getenv("AI_MODEL"),
-        "system_prompt": combined_prompt
+        "system_prompt": combined_prompt,
     }
-    
+    bindings = db.get_proxy_bindings()
+    if bindings.get("ai"):
+        proxy = db.get_proxy_by_id(bindings["ai"])
+        if proxy:
+            ai_config["proxy"] = proxy
+
     ai = AIHandler(**ai_config)
     
     try:
@@ -921,15 +1044,7 @@ async def stats_endpoint(websocket: WebSocket, server_id: int):
     if not server_info:
         await websocket.close(); return
 
-    ssh_config = {
-        "host": server_info["host"],
-        "port": server_info["port"],
-        "username": server_info["username"],
-        "password": server_info["password"],
-        "private_key": server_info.get("private_key")
-    }
-    
-    ssh = SSHHandler(**ssh_config)
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     if not ssh.connect():
         await websocket.close(); return
 
@@ -1116,13 +1231,7 @@ async def kill_process(server_id: int, pid: int = Form(...)):
     if not server_info:
         raise HTTPException(status_code=404, detail="Server not found")
     
-    ssh = SSHHandler(
-        host=server_info["host"],
-        port=server_info["port"],
-        username=server_info["username"],
-        password=server_info["password"],
-        private_key=server_info.get("private_key")
-    )
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     if not ssh.connect():
         raise HTTPException(status_code=500, detail="Failed to connect to server")
     
@@ -1143,13 +1252,7 @@ async def sftp_list(server_id: int, path: str = "/"):
     if not server_info:
         raise HTTPException(status_code=404, detail="Server not found")
     
-    ssh = SSHHandler(
-        host=server_info["host"],
-        port=server_info["port"],
-        username=server_info["username"],
-        password=server_info["password"],
-        private_key=server_info.get("private_key")
-    )
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     
     sftp = ssh.open_sftp()
     if not sftp:
@@ -1195,13 +1298,7 @@ async def sftp_download(server_id: int, path: str):
     if not server_info:
         raise HTTPException(status_code=404, detail="Server not found")
     
-    ssh = SSHHandler(
-        host=server_info["host"],
-        port=server_info["port"],
-        username=server_info["username"],
-        password=server_info["password"],
-        private_key=server_info.get("private_key")
-    )
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     
     sftp = ssh.open_sftp()
     if not sftp:
@@ -1242,13 +1339,7 @@ async def sftp_upload(
     if not server_info:
         raise HTTPException(status_code=404, detail="Server not found")
     
-    ssh = SSHHandler(
-        host=server_info["host"],
-        port=server_info["port"],
-        username=server_info["username"],
-        password=server_info["password"],
-        private_key=server_info.get("private_key")
-    )
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     
     sftp = ssh.open_sftp()
     if not sftp:
@@ -1276,7 +1367,7 @@ async def sftp_upload(
 @app.post("/api/sftp/rename", dependencies=[Depends(verify_token)])
 async def sftp_rename(data: SftpRenameModel):
     server_info = db.get_server_by_id(data.server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     sftp = ssh.open_sftp()
     try:
         sftp.rename(data.old_path, data.new_path)
@@ -1290,7 +1381,7 @@ async def sftp_rename(data: SftpRenameModel):
 @app.post("/api/sftp/chmod", dependencies=[Depends(verify_token)])
 async def sftp_chmod(data: SftpChmodModel):
     server_info = db.get_server_by_id(data.server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     sftp = ssh.open_sftp()
     try:
         # 将 755 这种字符串转换为八进制整数
@@ -1306,7 +1397,7 @@ async def sftp_chmod(data: SftpChmodModel):
 @app.delete("/api/sftp/delete", dependencies=[Depends(verify_token)])
 async def sftp_delete(data: SftpDeleteModel):
     server_info = db.get_server_by_id(data.server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     sftp = ssh.open_sftp()
     try:
         if data.is_dir:
@@ -1333,7 +1424,7 @@ async def sftp_delete(data: SftpDeleteModel):
 @app.get("/api/sftp/read", dependencies=[Depends(verify_token)])
 async def sftp_read(server_id: int, path: str):
     server_info = db.get_server_by_id(server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     sftp = ssh.open_sftp()
     try:
         stat = sftp.stat(path)
@@ -1361,7 +1452,7 @@ async def sftp_read(server_id: int, path: str):
 @app.post("/api/sftp/save", dependencies=[Depends(verify_token)])
 async def sftp_save(data: SftpSaveModel):
     server_info = db.get_server_by_id(data.server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     sftp = ssh.open_sftp()
     try:
         # 写入内容时，也需要以二进制模式打开并手动编码字符串
@@ -1377,7 +1468,7 @@ async def sftp_save(data: SftpSaveModel):
 @app.post("/api/sftp/create", dependencies=[Depends(verify_token)])
 async def sftp_create(data: SftpCreateModel):
     server_info = db.get_server_by_id(data.server_id)
-    ssh = SSHHandler(host=server_info["host"], port=server_info["port"], username=server_info["username"], password=server_info["password"], private_key=server_info.get("private_key"))
+    ssh = SSHHandler(**_get_ssh_config(server_info))
     sftp = ssh.open_sftp()
     try:
         if data.type == 'dir':

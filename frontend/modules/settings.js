@@ -72,6 +72,11 @@ export function initSettingsModule() {
         showModal('command-modal');
     };
     
+    // 代理管理
+    window.showAddProxyModal = showAddProxyModal;
+    window.editProxy = (id) => { /* 由 loadProxies 动态绑定 */ };
+    window.deleteProxy = (id) => { /* 由 loadProxies 动态绑定 */ };
+
     // 技能管理
     window.showAddSkillModal = showAddSkillModal;
     window.showSkillStoreModal = showSkillStoreModal;
@@ -85,6 +90,95 @@ export function initSettingsModule() {
     window.editRole = (id) => { /* 逻辑已在 loadRoles 中动态绑定 */ };
     window.setActiveRole = async (id) => { await api.setActiveRole(id); loadRoles(); };
     window.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id); loadRoles(); }};
+}
+
+// --- 代理管理 ---
+function showAddProxyModal() {
+    document.getElementById('proxy-modal-title').innerText = '添加代理';
+    document.getElementById('proxy-form').reset();
+    document.getElementById('proxy-id').value = '';
+    document.querySelectorAll('#proxy-form input[name^="bind_"]').forEach(cb => { cb.checked = false; });
+    showModal('proxy-modal');
+}
+
+export async function loadProxies() {
+    const container = document.getElementById('proxy-list-container');
+    if (!container) return;
+    try {
+        const [proxies, bindings] = await Promise.all([api.getProxies(), api.getProxyBindings()]);
+        if (proxies.length === 0) {
+            container.innerHTML = `
+                <div class="empty-tip" style="grid-column: 1/-1; padding: 40px; text-align: center; color: #888;">
+                    <i class="fas fa-network-wired" style="font-size: 2rem; margin-bottom: 12px; display: block;"></i>
+                    <p>暂无代理，点击「添加代理」创建</p>
+                </div>
+            `;
+            return;
+        }
+        container.innerHTML = proxies.map(p => {
+            const typeLabel = (p.type || 'http') === 'http' ? 'HTTP/HTTPS' : 'SOCKS5';
+            const addr = `${p.host}:${p.port}`;
+            const isTerminal = bindings.terminal === p.id;
+            const isAi = bindings.ai === p.id;
+            const isSkills = bindings.skills === p.id;
+            const bindStr = [
+                isTerminal ? '终端 ✓' : '终端 ✗',
+                isAi ? 'AI ✓' : 'AI ✗',
+                isSkills ? '技能 ✓' : '技能 ✗'
+            ].join('  ');
+            const ignoreLocal = !!p.ignore_local;
+            const safeName = (p.name || '').replace(/'/g, "\\'");
+            return `
+            <div class="role-card" data-proxy-id="${p.id}">
+                <div class="role-card-header">
+                    <h3>${p.name || '未命名'} <span class="badge" style="background:#555; margin-left:6px;">${typeLabel}</span>${ignoreLocal ? '<span class="badge" style="background:#0d7377; margin-left:4px;">忽略本地</span>' : ''}</h3>
+                </div>
+                <div class="role-card-body">
+                    <p style="margin: 0; font-family: monospace; font-size: 12px; color: #888;">${addr}</p>
+                    <p style="margin: 8px 0 0; font-size: 11px; color: #666;">绑定: ${bindStr}</p>
+                    ${p.description ? `<p style="margin: 6px 0 0; font-size: 11px; color: #555;">${p.description}</p>` : ''}
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-sm btn-secondary" onclick="editProxy(${p.id})">编辑</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteProxy(${p.id}, '${safeName}')">删除</button>
+                </div>
+            </div>
+            `;
+        }).join('');
+
+        window.editProxy = async (id) => {
+            const proxy = proxies.find(pr => pr.id === id);
+            if (!proxy) return;
+            document.getElementById('proxy-modal-title').innerText = '编辑代理';
+            document.getElementById('proxy-id').value = proxy.id;
+            const form = document.getElementById('proxy-form');
+            form.name.value = proxy.name || '';
+            form.type.value = proxy.type || 'http';
+            form.host.value = proxy.host || '';
+            form.port.value = proxy.port || '';
+            form.username.value = proxy.username || '';
+            form.password.value = proxy.password ? '********' : '';
+            form.description.value = proxy.description || '';
+            const ignoreLocalEl = form.querySelector('input[name="ignore_local"]');
+            if (ignoreLocalEl) ignoreLocalEl.checked = !!proxy.ignore_local;
+            form.querySelector('input[name="bind_terminal"]').checked = bindings.terminal === proxy.id;
+            form.querySelector('input[name="bind_ai"]').checked = bindings.ai === proxy.id;
+            form.querySelector('input[name="bind_skills"]').checked = bindings.skills === proxy.id;
+            showModal('proxy-modal');
+        };
+        window.deleteProxy = async (id, name) => {
+            if (!confirm(`确定要删除代理「${name}」吗？`)) return;
+            try {
+                await api.deleteProxy(id);
+                notify('已删除', 'success');
+                loadProxies();
+            } catch (err) {
+                notify('删除失败: ' + err.message, 'error');
+            }
+        };
+    } catch (err) {
+        container.innerHTML = `<div class="empty-tip" style="grid-column: 1/-1; padding: 24px; color: #e74c3c;">加载失败: ${err.message}</div>`;
+    }
 }
 
 // --- 技能管理 ---
@@ -292,7 +386,7 @@ async function loadRecommendedSkills(query) {
             <div class="role-card" style="cursor: pointer;${isInstalled ? ' opacity: 0.85;' : ''}"
                 data-skill-source="${(s.source || '').replace(/"/g, '&quot;')}"
                 data-skill-name="${(s.name || '').replace(/"/g, '&quot;')}"
-                data-skill-path="${(s.skill_path || '.agent-skills').replace(/"/g, '&quot;')}"
+                data-skill-path="${(s.skill_path ?? '.agent-skills').replace(/"/g, '&quot;')}"
                 data-skill-description="${(s.description || '').replace(/"/g, '&quot;')}"
                 data-skill-desc-zh="${(s.description_zh || '').replace(/"/g, '&quot;')}"
                 data-skill-device-values="${(s.device_type_values || []).join(',')}">
@@ -328,13 +422,13 @@ async function loadSkillsFromRepo() {
             <div class="role-card"
                 data-skill-source="${(s.source || '').replace(/"/g, '&quot;')}"
                 data-skill-name="${(s.name || '').replace(/"/g, '&quot;')}"
-                data-skill-path="${(s.skill_path || '.agent-skills').replace(/"/g, '&quot;')}"
+                data-skill-path="${(s.skill_path ?? '.agent-skills').replace(/"/g, '&quot;')}"
                 data-skill-description="${(s.description || '').replace(/"/g, '&quot;')}"
                 data-skill-desc-zh="${(s.description_zh || '').replace(/"/g, '&quot;')}"
                 data-skill-device-values="">
                 <div class="role-card-header"><h3>${s.name}</h3></div>
                 <div class="role-card-body">
-                    <small style="color:#888;">${s.source} / ${s.skill_path || '.agent-skills'}</small>
+                    <small style="color:#888;">${s.source} / ${(s.skill_path !== undefined && s.skill_path !== null && s.skill_path !== '') ? s.skill_path : '根目录'}</small>
                 </div>
                 <div class="card-actions">
                     <button class="btn btn-sm btn-primary" onclick="skillStoreSelectInstall(event, this)">安装</button>
@@ -356,10 +450,11 @@ function skillStoreSelectInstall(ev, btn, skillData) {
         if (!card) return;
         if (card.dataset.skillSource !== undefined) {
             const dv = card.dataset.skillDeviceValues || '';
+            const sp = card.dataset.skillPath;
             data = {
                 source: card.dataset.skillSource || '',
                 name: card.dataset.skillName || '',
-                skill_path: card.dataset.skillPath || '.agent-skills',
+                skill_path: (sp !== undefined && sp !== null ? sp : '.agent-skills'),
                 description: card.dataset.skillDescription || '',
                 description_zh: card.dataset.skillDescZh || '',
                 device_type_values: dv ? dv.split(',').filter(Boolean) : []
@@ -370,7 +465,7 @@ function skillStoreSelectInstall(ev, btn, skillData) {
     skillStorePendingInstall = {
         source: data.source || data.repo || '',
         skill_name: data.name,
-        skill_path: data.skill_path || '.agent-skills',
+        skill_path: data.skill_path ?? '.agent-skills',
         description_zh: data.description_zh || data.description || '',
         description: data.description || '',
         device_type_values: data.device_type_values || []
@@ -805,6 +900,56 @@ function initForms() {
             } catch (err) { notify('保存失败: ' + err.message, 'error'); }
             finally { setBtnLoading(submitBtn, false); }
             };
+    }
+
+    // 代理表单
+    const proxyForm = document.getElementById('proxy-form');
+    if (proxyForm) {
+        proxyForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const id = document.getElementById('proxy-id').value;
+            const pwInput = e.target.password;
+            const ignoreLocalEl = e.target.querySelector('input[name="ignore_local"]');
+            const data = {
+                name: e.target.name.value.trim(),
+                type: e.target.type.value,
+                host: e.target.host.value.trim(),
+                port: parseInt(e.target.port.value, 10),
+                username: e.target.username.value.trim() || null,
+                password: (pwInput.value && pwInput.value !== '********') ? pwInput.value : null,
+                description: e.target.description.value.trim() || null,
+                ignore_local: ignoreLocalEl ? ignoreLocalEl.checked : false
+            };
+            setBtnLoading(submitBtn, true);
+            try {
+                let proxyId;
+                if (id) {
+                    await api.updateProxy(id, data);
+                    proxyId = parseInt(id, 10);
+                } else {
+                    const res = await api.addProxy(data);
+                    proxyId = res.id;
+                }
+                const bindTerminal = e.target.querySelector('input[name="bind_terminal"]').checked;
+                const bindAi = e.target.querySelector('input[name="bind_ai"]').checked;
+                const bindSkills = e.target.querySelector('input[name="bind_skills"]').checked;
+                const curBindings = await api.getProxyBindings();
+                const newBindings = {
+                    terminal: bindTerminal ? proxyId : (curBindings.terminal === proxyId ? null : curBindings.terminal),
+                    ai: bindAi ? proxyId : (curBindings.ai === proxyId ? null : curBindings.ai),
+                    skills: bindSkills ? proxyId : (curBindings.skills === proxyId ? null : curBindings.skills)
+                };
+                await api.updateProxyBindings(newBindings);
+                closeModal('proxy-modal');
+                notify('保存成功', 'success');
+                loadProxies();
+            } catch (err) {
+                notify('保存失败: ' + err.message, 'error');
+            } finally {
+                setBtnLoading(submitBtn, false);
+            }
+        };
     }
 
     // 系统设置表单

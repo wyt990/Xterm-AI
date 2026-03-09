@@ -106,6 +106,15 @@ export const api = {
     listSkillsFromRepo: (repo, token) => request(`/api/skill_store/list?repo=${encodeURIComponent(repo)}${token ? '&token=' + encodeURIComponent(token) : ''}`),
     installSkillFromStore: (data) => request('/api/skill_store/install', { method: 'POST', body: JSON.stringify(data) }),
 
+    // 代理管理
+    getProxies: () => request('/api/proxies'),
+    getProxy: (id) => request(`/api/proxies/${id}`),
+    addProxy: (data) => request('/api/proxies', { method: 'POST', body: JSON.stringify(data) }),
+    updateProxy: (id, data) => request(`/api/proxies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteProxy: (id) => request(`/api/proxies/${id}`, { method: 'DELETE' }),
+    getProxyBindings: () => request('/api/proxy_bindings'),
+    updateProxyBindings: (data) => request('/api/proxy_bindings', { method: 'POST', body: JSON.stringify(data) }),
+
     // 设备类型与绑定
     getDeviceTypes: () => request('/api/device_types'),
     addDeviceType: (data) => request('/api/device_types', { method: 'POST', body: JSON.stringify(data) }),

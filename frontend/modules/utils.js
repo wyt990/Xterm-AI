@@ -14,6 +14,7 @@ export async function loadComponents() {
         'system_modals.html',
         'device_type_modals.html',
         'skill_modals.html',
+        'proxy_modals.html',
         'doc_modals.html'
     ];
     
