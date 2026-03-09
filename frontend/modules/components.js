@@ -32,10 +32,11 @@ class ServerCard extends HTMLElement {
         const safeName = s.name.replace(/'/g, "\\'");
 
         this.className = 'server-card';
+        const escapedName = (s.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         this.innerHTML = `
             <div class="server-card-icon"><i class="${icon}"></i></div>
             <div class="server-card-info">
-                <h4>${s.name}</h4>
+                <h4 title="${escapedName}">${escapedName}</h4>
                 <p>${s.host}:${s.port}</p>
             </div>
             <div class="server-card-actions">

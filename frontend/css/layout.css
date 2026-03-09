@@ -291,10 +291,10 @@
     display: none;
 }
 
-/* 服务器卡片网格 */
+/* 服务器卡片网格：增大最小宽度以便完整显示服务器名称 */
 .server-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 8px;
     padding: 6px 0 8px;
 }
@@ -334,9 +334,12 @@
 .server-card-info h4 {
     margin: 0 0 4px 0;
     font-size: 0.88rem;
-    white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-clamp: 2;
+    overflow-wrap: break-word;
 }
 
 .server-card-info p {
