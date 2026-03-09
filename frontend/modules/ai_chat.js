@@ -11,27 +11,47 @@ let autoExecuteCount = 0; // 自动连续执行次数计数器，防止死循环
 const MAX_AUTO_EXECUTE = 5; 
 
 // 判定命令是否安全（只读，无重定向，无管道写入）
-function isSafeCommand(cmd) {
+// deviceType: 设备类型，如 linux/windows/h3c/huawei/cisco/ruijie，用于区分放行规则
+function isSafeCommand(cmd, deviceType) {
     const unsafeKeywords = [
-        'rm', 'kill', 'mv', 'cp', 'chmod', 'chown', 'reboot', 'shutdown', 
+        'rm', 'kill', 'mv', 'cp', 'chmod', 'chown', 'reboot', 'shutdown',
         'mkfs', 'dd', 'fdisk', 'parted', 'apt', 'yum', 'dnf', 'wget', 'curl',
         'sh', 'bash', 'python', 'perl', 'ruby', 'gcc', 'make', 'install',
         '>>', '>', '|'
     ];
+    // Linux/通用只读命令
     const safeReadCommands = [
-        'ls', 'cat', 'df', 'free', 'uptime', 'hostname', 'uname', 'grep', 
+        'ls', 'cat', 'df', 'free', 'uptime', 'hostname', 'uname', 'grep',
         'tail', 'head', 'ps', 'netstat', 'ss', 'ip', 'ifconfig', 'ping',
         'cat /etc/', 'top', 'htop', 'iotop', 'vmstat', 'iostat', 'lsof'
     ];
-    
+    // Windows PowerShell 只读命令
+    const safeWindowsCommands = [
+        'Get-', 'Get-ChildItem', 'Get-Content', 'Get-Process', 'Get-Service',
+        'dir', 'type', 'hostname', 'systeminfo', 'netstat', 'ipconfig'
+    ];
+    // H3C/华为：display 为只读查询
+    const safeNetworkDisplay = ['display'];
+    // 思科/锐捷：show 为只读查询
+    const safeNetworkShow = ['show'];
+
     const cmdTrim = cmd.trim();
-    // 检查是否包含危险操作符（写重定向、管道写入等）
-    if (cmdTrim.includes('>') || cmdTrim.includes('>>')) {
-        return false;
+    if (cmdTrim.includes('>') || cmdTrim.includes('>>')) return false;
+
+    const dt = (deviceType || '').toLowerCase();
+    let safePrefixes = safeReadCommands;
+    if (dt === 'windows') {
+        safePrefixes = safeReadCommands.concat(safeWindowsCommands);
+    } else if (['h3c', 'huawei'].includes(dt)) {
+        safePrefixes = safeReadCommands.concat(safeNetworkDisplay);
+    } else if (['cisco', 'ruijie'].includes(dt)) {
+        safePrefixes = safeReadCommands.concat(safeNetworkShow);
+    } else if (dt) {
+        // 其他网络设备或未明确类型：display 与 show 均放行（兼容多厂商）
+        safePrefixes = safeReadCommands.concat(safeNetworkDisplay, safeNetworkShow);
     }
 
-    // 只要匹配了安全列表的前缀，且不包含危险关键字，则视为安全
-    return safeReadCommands.some(s => cmdTrim.startsWith(s)) && !unsafeKeywords.some(u => cmdTrim.includes(` ${u} `) || cmdTrim.startsWith(`${u} `));
+    return safePrefixes.some(s => cmdTrim.startsWith(s)) && !unsafeKeywords.some(u => cmdTrim.includes(` ${u} `) || cmdTrim.startsWith(`${u} `));
 }
 const aiMessages = document.getElementById('ai-messages');
 const aiInput = document.getElementById('ai-input');
@@ -609,9 +629,10 @@ function processAIResponseForCommands(text, msgDiv, tab) {
                         commandFound = true; // 每一轮回复只处理第一个指令
                         const command = data.command.trim();
                         const mode = document.getElementById('ai-mode-select').value;
-                        
-                        // 判定：Agent 模式 + 安全命令 + 未超限 -> 自动执行
-                        if (mode === 'agent' && isSafeCommand(command) && autoExecuteCount < MAX_AUTO_EXECUTE) {
+                        const deviceType = tab?.config?.device_type_value || tab?.config?.device_type || '';
+
+                        // 判定：Agent 模式 + 安全命令 + 未超限 -> 自动执行（按设备类型：Linux/Windows/网络设备 display|show）
+                        if (mode === 'agent' && isSafeCommand(command, deviceType) && autoExecuteCount < MAX_AUTO_EXECUTE) {
                             autoExecuteCount++;
                             renderAutoExecuteCard(command, data.intent, msgDiv, tab);
                             executeAICommand(command, tab);
