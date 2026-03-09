@@ -585,12 +585,20 @@ function finishAIProcessing(fullResponse, msgDiv, tab) {
     if (fullResponse && tab) {
         const trimmed = fullResponse.trim();
         tab.chatHistory.push({ role: 'assistant', content: trimmed });
-        // 若 msgDiv 已被 tabSwitched 清空脱离 DOM，需重新挂载到 aiMessages
-        if (!aiMessages.contains(msgDiv)) {
+        // 仅当消息所属 tab 仍为当前激活 tab 时挂载/渲染，避免切走时误插入到其他 tab 的视图
+        const isActiveTab = store.activeTabId === tab.id;
+        if (isActiveTab && !aiMessages.contains(msgDiv)) {
             aiMessages.appendChild(msgDiv);
         }
         requestAnimationFrame(() => {
+            // 若已被 tabSwitched 重建或用户已切走，跳过渲染（切回时会从 chatHistory 重建）
+            if (!aiMessages.contains(msgDiv)) return;
+            if (store.activeTabId !== tab.id) return;
             processAIResponseForCommands(trimmed, msgDiv, tab);
+            // 渲染完成后滚动到底部，确保总结报告可见
+            requestAnimationFrame(() => {
+                aiMessages.scrollTop = aiMessages.scrollHeight;
+            });
         });
     }
 }
