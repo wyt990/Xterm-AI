@@ -115,6 +115,7 @@ export const api = {
     deleteProxy: (id) => request(`/api/proxies/${id}`, { method: 'DELETE' }),
     getProxyBindings: () => request('/api/proxy_bindings'),
     updateProxyBindings: (data) => request('/api/proxy_bindings', { method: 'POST', body: JSON.stringify(data) }),
+    clearAiProxyBinding: () => request('/api/proxy_bindings/clear_ai', { method: 'POST' }),
 
     // 设备类型与绑定
     getDeviceTypes: () => request('/api/device_types'),

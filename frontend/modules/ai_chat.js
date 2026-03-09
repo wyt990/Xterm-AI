@@ -436,12 +436,16 @@ function openAISocket(messages, tab) {
     const contextParam = `&device_type=${deviceType}&server_name=${serverName}` + (serverId ? `&server_id=${serverId}` : '');
     
     const wsUrl = `${protocol}//${window.location.host}/ws/ai?mode=${mode}${roleParam}${tokenParam}${contextParam}`;
+    if (typeof console !== 'undefined' && console.debug) {
+        console.debug('[AI] 连接中:', wsUrl.replace(/token=[^&]+/, 'token=***'));
+    }
 
     aiSocket = new WebSocket(wsUrl);
     const currentAiMsgDiv = createMessageDiv('ai');
     let fullResponse = '';
 
     aiSocket.onopen = () => {
+        if (typeof console !== 'undefined' && console.debug) console.debug('[AI] WebSocket 已连接');
         aiSocket.send(JSON.stringify({ mode, messages }));
     };
 
@@ -453,6 +457,7 @@ function openAISocket(messages, tab) {
             return;
         }
         if (raw.startsWith('[AI Error:')) {
+            if (typeof console !== 'undefined' && console.error) console.error('[AI] 后端错误:', raw);
             fullResponse += `\n${raw}`;
             currentAiMsgDiv.innerText = fullResponse;
             finishAIProcessing(fullResponse, currentAiMsgDiv, tab);
@@ -463,7 +468,10 @@ function openAISocket(messages, tab) {
         aiMessages.scrollTop = aiMessages.scrollHeight;
     };
 
-    aiSocket.onclose = () => {
+    aiSocket.onclose = (e) => {
+        if (typeof console !== 'undefined' && console.debug) {
+            console.debug('[AI] WebSocket 关闭:', e.code, e.reason || '');
+        }
         if (isAiProcessing) finishAIProcessing(fullResponse, currentAiMsgDiv, tab);
     };
 }

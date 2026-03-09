@@ -2,6 +2,13 @@ import httpx
 import json
 import os
 
+def _log(msg):
+    try:
+        from logger import app_logger
+        app_logger.info("AI 请求", msg)
+    except Exception:
+        pass
+
 class AIHandler:
     def __init__(self, api_key, base_url, model, system_prompt, proxy=None):
         self.api_key = api_key
@@ -66,22 +73,35 @@ class AIHandler:
         }
         
         proxy_url = self._proxy_url()
+        _log(f"base_url={self.base_url!r}, proxy={'是' if proxy_url else '否'}")
         try:
             async with httpx.AsyncClient(timeout=60.0, proxy=proxy_url) as client:
                 async with client.stream("POST", f"{self.base_url}/chat/completions", headers=headers, json=data) as response:
+                    if response.status_code != 200:
+                        body = await response.aread()
+                        try:
+                            err_obj = json.loads(body.decode())
+                            err_msg = err_obj.get("error", {}).get("message") or err_obj.get("errors", {}).get("message") or str(err_obj.get("error", body.decode()[:200]))
+                        except Exception:
+                            err_msg = body.decode(errors="replace")[:300]
+                        hint = ""
+                        if response.status_code == 401:
+                            hint = " 建议到 模型设置 中编辑该端点，重新填写有效的 API Key/Token。"
+                        yield f"\n[AI Error: API 返回 {response.status_code}: {err_msg}]{hint}\n"
+                        return
                     async for line in response.aiter_lines():
                         if line.startswith("data: "):
                             if line.strip() == "data: [DONE]":
                                 break
                             try:
                                 json_data = json.loads(line[6:])
-                                content = json_data['choices'][0]['delta'].get('content', '')
+                                content = json_data.get('choices', [{}])[0].get('delta', {}).get('content', '')
                                 if content:
                                     yield content
                             except Exception as e:
-                                print(f"JSON Parse Error: {e}, Line: {line}")
+                                _log(f"JSON 解析失败: {e}, 行: {line[:100]}")
         except Exception as e:
             error_msg = str(e)
-            if "All connection attempts failed" in error_msg:
-                error_msg += " (连接 AI 端点失败，请检查网络或代理设置)"
+            if "All connection attempts failed" in error_msg or "connection" in error_msg.lower():
+                error_msg += " (请检查 AI 端点、网络或代理：若未勾选「AI 对话」绑定，AI 应直连)"
             yield f"\n[AI Error: {error_msg}]\n"

@@ -394,6 +394,14 @@ async def update_proxy_bindings(bindings: ProxyBindingsModel):
     )
     return {"status": "success"}
 
+
+@app.post("/api/proxy_bindings/clear_ai", dependencies=[Depends(verify_token)])
+async def clear_ai_proxy_binding():
+    """强制清除 AI 场景的代理绑定。用于修复「未勾选 AI 对话但 AI 仍走代理」的残留问题。"""
+    db.upsert_system_setting("proxy_for_ai", "")
+    app_logger.info("系统设置", "已清除 AI 代理绑定")
+    return {"status": "success", "message": "已清除 AI 代理绑定"}
+
 @app.post("/api/ai_endpoints/{ai_id}/activate", dependencies=[Depends(verify_token)])
 async def activate_ai(ai_id: int):
     db.set_active_ai(ai_id)
@@ -985,29 +993,32 @@ async def ai_endpoint(
             app_logger.error("文档注入", f"加载服务器文档失败: {e}")
 
     combined_prompt = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}{command_protocol}"
-    
-    # 2. 获取 AI 端点
-    ai_info = None
-    if role_info.get("ai_endpoint_id"):
-        ai_info = db.get_ai_endpoint_by_id(role_info["ai_endpoint_id"])
-    
-    if not ai_info:
-        ai_info = db.get_active_ai_endpoint()
-    
-    ai_config = {
-        "api_key": ai_info["api_key"] if ai_info else os.getenv("AI_API_KEY"),
-        "base_url": ai_info["base_url"] if ai_info else os.getenv("AI_BASE_URL"),
-        "model": ai_info["model"] if ai_info else os.getenv("AI_MODEL"),
-        "system_prompt": combined_prompt,
-    }
-    bindings = db.get_proxy_bindings()
-    if bindings.get("ai"):
-        proxy = db.get_proxy_by_id(bindings["ai"])
-        if proxy:
-            ai_config["proxy"] = proxy
 
-    ai = AIHandler(**ai_config)
-    
+    def _build_ai_handler():
+        """每次调用时从 DB 重新加载端点与代理，支持热加载，无需重启服务"""
+        ai_info = None
+        if role_info.get("ai_endpoint_id"):
+            ai_info = db.get_ai_endpoint_by_id(role_info["ai_endpoint_id"])
+        if not ai_info:
+            ai_info = db.get_active_ai_endpoint()
+        ai_config = {
+            "api_key": ai_info["api_key"] if ai_info else os.getenv("AI_API_KEY"),
+            "base_url": ai_info["base_url"] if ai_info else os.getenv("AI_BASE_URL"),
+            "model": ai_info["model"] if ai_info else os.getenv("AI_MODEL"),
+            "system_prompt": combined_prompt,
+        }
+        bindings = db.get_proxy_bindings()
+        settings = db.get_system_settings()
+        proxy_for_ai_raw = settings.get("proxy_for_ai", "")
+        if bindings.get("ai"):
+            proxy = db.get_proxy_by_id(bindings["ai"])
+            if proxy:
+                ai_config["proxy"] = proxy
+                app_logger.info("AI 代理", f"使用代理: {proxy.get('name', '')} ({proxy.get('host')}:{proxy.get('port')})")
+        else:
+            app_logger.info("AI 代理", f"直连模式 (proxy_for_ai={proxy_for_ai_raw!r}, bindings.ai={bindings.get('ai')})")
+        return AIHandler(**ai_config)
+
     try:
         while True:
             data = await websocket.receive_text()
@@ -1027,8 +1038,9 @@ async def ai_endpoint(
             
             if not messages:
                 continue
-            
-            # 动态调整提示词（保持 env_constraints、server_doc_block 与 skills_block）
+
+            # 每次请求前重新加载端点与代理，支持热加载（修改模型设置后无需重启）
+            ai = _build_ai_handler()
             base = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}"
             if mode == "agent":
                 ai.system_prompt = base + command_protocol
@@ -1038,7 +1050,7 @@ async def ai_endpoint(
             # 日志记录 AI 请求
             user_msg = messages[-1]["content"] if messages else ""
             app_logger.info("AI 对话", f"模式: {mode}, 用户提问: {user_msg[:100]}...")
-            
+
             full_response = ""
             async for chunk in ai.get_response_stream(messages):
                 full_response += chunk

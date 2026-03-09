@@ -54,6 +54,7 @@ export function initSettingsModule() {
     window.loadLogContent = loadLogContent;
     window.handleClearLogs = handleClearLogs;
     window.handleBackupDatabase = handleBackupDatabase;
+    window.handleClearAiProxy = handleClearAiProxy;
     window.handleClearAllStatsHistory = handleClearAllStatsHistory;
 
     // 命令管理
@@ -613,7 +614,9 @@ export async function loadAIEndpoints() {
             document.getElementById('ai-id').value = ai.id;
             document.getElementById('ai-form').name.value = ai.name;
             document.getElementById('ai-form').base_url.value = ai.base_url;
-            document.getElementById('ai-form').api_key.value = ai.api_key;
+            // 编辑时用占位符，避免意外覆盖；用户可填新 Key 或保留 ******** 表示不修改
+            document.getElementById('ai-form').api_key.value = ai.api_key ? '********' : '';
+            document.getElementById('ai-form').api_key.placeholder = ai.api_key ? '留空或 ******** 表示不修改' : '必填';
             document.getElementById('ai-form').model.value = ai.model;
             showModal('ai-modal');
         };
@@ -747,6 +750,15 @@ async function handleBackupDatabase() {
         notify(`数据库已备份至 ${res.filename || res.path || 'config/backup'}`, "success");
     } catch (err) {
         notify("备份失败: " + err.message, "error");
+    }
+}
+
+async function handleClearAiProxy() {
+    try {
+        await api.clearAiProxyBinding();
+        notify("已清除 AI 代理绑定，AI 将直连", "success");
+    } catch (err) {
+        notify("操作失败: " + err.message, "error");
     }
 }
 

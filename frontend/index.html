@@ -372,10 +372,15 @@
                     </section>
                     <section class="settings-section" style="margin-top: 30px;">
                         <h3 style="margin-bottom: 15px; color: #0078d4;">代理设置</h3>
-                        <p style="color: #888; font-size: 13px; margin-bottom: 12px;">配置代理后，可将代理绑定到终端、AI 对话、技能等场景。支持 HTTP 和 SOCKS5 类型。</p>
-                        <button type="button" class="btn btn-primary" style="margin-bottom: 16px;" onclick="showAddProxyModal()">
-                            <i class="fas fa-plus"></i> 添加代理
-                        </button>
+                        <p style="color: #888; font-size: 13px; margin-bottom: 12px;">配置代理后，可将代理绑定到终端、AI 对话、技能等场景。支持 HTTP 和 SOCKS5 类型。若 AI 无法使用且未勾选「AI 对话」，可点击「清除 AI 代理绑定」修复残留配置。</p>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;">
+                            <button type="button" class="btn btn-primary" onclick="showAddProxyModal()">
+                                <i class="fas fa-plus"></i> 添加代理
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="handleClearAiProxy()" title="修复：未勾选 AI 对话但 AI 仍异常时使用">
+                                <i class="fas fa-unlink"></i> 清除 AI 代理绑定
+                            </button>
+                        </div>
                         <div id="proxy-list-container" class="role-grid" style="min-height: 60px;">
                             <!-- 代理列表由 JS 动态填充 -->
                         </div>

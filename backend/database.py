@@ -437,14 +437,24 @@ class Database:
             return cursor.lastrowid
 
     def update_ai_endpoint(self, ai_id, data):
+        """更新 AI 端点。api_key 为空或 ******** 时保留原值，避免编辑时误覆盖。"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             capabilities = json.dumps(data.get('capabilities', ['text']))
-            cursor.execute('''
-                UPDATE ai_endpoints 
-                SET name=?, api_key=?, base_url=?, model=?, capabilities=?
-                WHERE id=?
-            ''', (data['name'], data['api_key'], data['base_url'], data['model'], capabilities, ai_id))
+            api_key = data.get('api_key') or ''
+            if not api_key or api_key.strip() == '' or api_key == '********':
+                # 保留原有 api_key
+                cursor.execute('''
+                    UPDATE ai_endpoints 
+                    SET name=?, base_url=?, model=?, capabilities=?
+                    WHERE id=?
+                ''', (data['name'], data['base_url'], data['model'], capabilities, ai_id))
+            else:
+                cursor.execute('''
+                    UPDATE ai_endpoints 
+                    SET name=?, api_key=?, base_url=?, model=?, capabilities=?
+                    WHERE id=?
+                ''', (data['name'], api_key, data['base_url'], data['model'], capabilities, ai_id))
             conn.commit()
 
     def set_active_ai(self, ai_id):
@@ -648,17 +658,15 @@ class Database:
         }
 
     def update_proxy_bindings(self, terminal=None, ai=None, skills=None):
-        """更新场景绑定，None/0 表示不绑定"""
+        """更新场景绑定。None/0 表示解除绑定；传入后必须更新，否则解除勾选时旧值会残留"""
         def _to_val(x):
             if x is None or x == 0:
                 return ''
             return str(int(x))
-        if terminal is not None:
-            self.upsert_system_setting('proxy_for_terminal', _to_val(terminal))
-        if ai is not None:
-            self.upsert_system_setting('proxy_for_ai', _to_val(ai))
-        if skills is not None:
-            self.upsert_system_setting('proxy_for_skills', _to_val(skills))
+        # 始终更新：接口每次发送完整 bindings，null 表示解除绑定
+        self.upsert_system_setting('proxy_for_terminal', _to_val(terminal))
+        self.upsert_system_setting('proxy_for_ai', _to_val(ai))
+        self.upsert_system_setting('proxy_for_skills', _to_val(skills))
 
     # --- 命令分组相关操作 ---
     def get_all_command_groups(self):
