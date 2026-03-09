@@ -9,6 +9,7 @@ import asyncio
 import json
 import glob
 import io
+import shutil
 import jwt
 import stat
 from datetime import datetime, timedelta
@@ -549,6 +550,26 @@ async def clear_logs():
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/database/backup", dependencies=[Depends(verify_token)])
+async def backup_database():
+    """将 config/xterm.db 备份到 config/backup/xterm_年月日时分秒.db"""
+    # db_path 相对于 backend 目录，需转为绝对路径
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.normpath(os.path.join(base_dir, db_path))
+    if not os.path.exists(src_path):
+        raise HTTPException(status_code=404, detail="数据库文件不存在")
+    backup_dir = os.path.join(os.path.dirname(src_path), "backup")
+    os.makedirs(backup_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    filename = f"xterm_{timestamp}.db"
+    dest_path = os.path.join(backup_dir, filename)
+    try:
+        shutil.copy2(src_path, dest_path)
+        app_logger.info("系统设置", f"数据库已备份至 {filename}")
+        return {"status": "success", "filename": filename, "path": f"config/backup/{filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"备份失败: {e}")
 
 # --- 快捷命令管理 API ---
 @app.get("/api/command_groups", dependencies=[Depends(verify_token)])

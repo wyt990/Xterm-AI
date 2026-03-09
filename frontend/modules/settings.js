@@ -53,6 +53,7 @@ export function initSettingsModule() {
     window.showLogsModal = showLogsModal;
     window.loadLogContent = loadLogContent;
     window.handleClearLogs = handleClearLogs;
+    window.handleBackupDatabase = handleBackupDatabase;
     window.handleClearAllStatsHistory = handleClearAllStatsHistory;
 
     // 命令管理
@@ -737,6 +738,15 @@ async function handleClearLogs() {
         await api.clearLogs();
         notify("日志已清空");
         if (document.getElementById('logs-modal').style.display === 'flex') loadLogContent();
+    }
+}
+
+async function handleBackupDatabase() {
+    try {
+        const res = await api.backupDatabase();
+        notify(`数据库已备份至 ${res.filename || res.path || 'config/backup'}`, "success");
+    } catch (err) {
+        notify("备份失败: " + err.message, "error");
     }
 }
 

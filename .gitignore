@@ -6,6 +6,7 @@ __pycache__/
 
 # Databases
 config/xterm.db
+config/backup/
 *.sqlite3
 
 # Environment variables

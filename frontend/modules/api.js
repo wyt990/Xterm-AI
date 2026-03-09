@@ -87,6 +87,7 @@ export const api = {
     getLogFiles: () => request('/api/logs'),
     getLogContent: (file, lines) => request(`/api/logs/content?filename=${file}&lines=${lines}`),
     clearLogs: () => request('/api/logs', { method: 'DELETE' }),
+    backupDatabase: () => request('/api/database/backup', { method: 'POST' }),
 
     // 技能管理
     getSkills: (params = {}) => {
