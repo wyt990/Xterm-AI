@@ -150,6 +150,17 @@ class Database:
                 )
             ''')
             
+            # 9.5 服务器文档表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS server_docs (
+                    server_id INTEGER PRIMARY KEY,
+                    content TEXT DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+                )
+            ''')
+            
             # 10. 技能-设备类型关联表 (多对多)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS skill_device_types (
@@ -332,7 +343,36 @@ class Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('DELETE FROM server_stats_history WHERE server_id = ?', (server_id,))
+            cursor.execute('DELETE FROM server_docs WHERE server_id = ?', (server_id,))
             cursor.execute('DELETE FROM servers WHERE id = ?', (server_id,))
+            conn.commit()
+
+    # --- 服务器文档 ---
+    def get_server_doc(self, server_id):
+        """获取服务器文档，不存在返回 None"""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('SELECT server_id, content, created_at, updated_at FROM server_docs WHERE server_id = ?', (server_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def upsert_server_doc(self, server_id, content):
+        """创建或更新服务器文档"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO server_docs (server_id, content, created_at, updated_at)
+                VALUES (?, ?, datetime('now'), datetime('now'))
+                ON CONFLICT(server_id) DO UPDATE SET content = excluded.content, updated_at = datetime('now')
+            ''', (server_id, content or ''))
+            conn.commit()
+
+    def delete_server_doc(self, server_id):
+        """删除服务器文档"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM server_docs WHERE server_id = ?', (server_id,))
             conn.commit()
 
     # --- AI 配置相关操作 ---

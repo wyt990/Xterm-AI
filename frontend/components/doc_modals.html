@@ -1,0 +1,21 @@
+<!-- 服务器文档弹窗 -->
+<div id="server-doc-modal" class="modal" style="z-index: 10000; background: rgba(0,0,0,0.85);">
+    <div class="modal-content" style="max-width: 700px; width: 90%; max-height: 85vh; margin-top: 5vh;">
+        <div class="modal-header">
+            <h3><i class="fas fa-file-alt"></i> <span id="server-doc-modal-title">服务器环境文档</span></h3>
+            <span class="close" onclick="closeModal('server-doc-modal')" title="关闭">&times;</span>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; min-height: 300px;">
+            <div class="form-group" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                <label>Markdown 内容</label>
+                <textarea id="server-doc-content" rows="16" placeholder="# 服务器环境文档&#10;&gt; 连接信息、创建时间&#10;&#10;## 基本信息&#10;..." style="font-family: 'Consolas','Monaco',monospace; font-size: 13px; resize: vertical; min-height: 280px;"></textarea>
+            </div>
+            <div class="modal-footer" style="padding: 10px 0 0; border: none; margin-top: 12px;">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('server-doc-modal')">取消</button>
+                <button type="button" class="btn btn-primary" id="server-doc-save-btn" onclick="saveServerDoc()">
+                    <i class="fas fa-save"></i> 保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

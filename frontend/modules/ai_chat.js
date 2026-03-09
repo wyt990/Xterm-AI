@@ -3,7 +3,7 @@
  */
 import { store } from './store.js';
 import { api } from './api.js';
-import { notify } from './utils.js';
+import { notify, showModal, closeModal, setBtnLoading } from './utils.js';
 
 let aiSocket = null;
 let isAiProcessing = false;
@@ -80,6 +80,10 @@ export function initAIModule() {
     // 加载角色列表
     loadRoles();
 
+    // 初始化文档按钮状态
+    const tab = store.activeTabId ? window.getTab(store.activeTabId) : null;
+    updateServerDocButtonState(tab);
+
     // 绑定发送按钮
     sendBtn.onclick = () => {
         autoExecuteCount = 0;
@@ -113,8 +117,9 @@ export function initAIModule() {
         aiMessages.innerHTML = '<div class="message system" style="text-align:center;color:#666;padding:20px;">暂无活跃连接，请先连接服务器</div>';
     });
 
-    // 标签切换：刷新消息列表 + 同步角色选择器
+    // 标签切换：刷新消息列表 + 同步角色选择器 + 文档按钮状态
     window.addEventListener('tabSwitched', (e) => {
+        updateServerDocButtonState(e.detail.tab);
         const tab = e.detail.tab;
         
         // 核心逻辑：场景驱动的角色自动切换
@@ -150,11 +155,244 @@ export function initAIModule() {
         aiMessages.scrollTop = aiMessages.scrollHeight;
     });
 
+    window.addEventListener('allTabsClosed', () => updateServerDocButtonState(null));
+
     // 角色在"AI 角色"页面被修改后，重新加载角色列表
     window.addEventListener('rolesChanged', () => loadRoles());
 
-    // 暴露清空对话给全局
+    // 暴露清空对话、文档弹窗给全局
     window.clearChat = clearChat;
+    window.showServerDocModal = showServerDocModal;
+    window.saveServerDoc = saveServerDoc;
+}
+
+// 服务器文档模板（按 device_type 选择）
+const SERVER_DOC_TEMPLATES = {
+    linux: `# {{name}} 服务器环境文档
+
+> 连接信息: {{username}}@{{host}}:{{port}}
+> 创建时间: {{create_time}}
+
+## 📋 服务器基本信息
+
+- **主机名**: 
+- **端口**: {{port}}
+- **用户**: {{username}}
+- **操作系统发行版**: （例如：Ubuntu 22.04 / CentOS 7 / Debian 12）
+- **内核版本**: 
+- **机器类型**: （物理机 / 虚拟机 / 容器 / 云主机）
+- **其他说明**: 
+
+## 🧩 系统与资源概况（由 AI 自动补充）
+
+- **CPU / 内存**: 
+- **磁盘挂载与容量**: 
+- **网络环境**: （公网 / 内网 / VPN 等）
+- **安全/限制**: （如 SELinux、ulimit、AppArmor 等）
+
+## 📦 已安装软件与运行方式（由 AI 自动补充）
+
+### 普通安装（包管理器 / 源码）
+
+
+### Docker / 容器化服务
+
+
+## 📁 目录与路径（由 AI 自动补充）
+
+- **应用目录**: 
+- **日志目录**: 
+- **配置目录**: 
+- **数据目录**: 
+- **备份目录**: 
+
+## 📝 配置文件与日志（由 AI 自动补充）
+
+
+## 🚀 服务与启动方式（由 AI 自动补充）
+
+
+## 🧯 常见问题与排查记录（由 AI 自动补充）
+
+
+## ✅ 待办事项 / 后续优化（由 AI 自动补充）
+
+- [ ] 
+
+---
+*本文档由 AI SSH Assistant 自动生成，AI 会在对话过程中逐步补充和更新上述信息。*
+`,
+    windows: `# {{name}} 服务器环境文档
+
+> 连接信息: {{username}}@{{host}}:{{port}}
+> 创建时间: {{create_time}}
+
+## 📋 服务器基本信息
+
+- **主机名**: 
+- **端口**: {{port}}
+- **用户**: {{username}}
+- **操作系统**: （例如：Windows Server 2019 / Windows 10）
+- **机器类型**: （物理机 / 虚拟机 / 云主机）
+- **其他说明**: 
+
+## 🧩 系统与资源概况（由 AI 自动补充）
+
+- **CPU / 内存**: 
+- **磁盘挂载与容量**: 
+- **网络环境**: 
+
+## 📦 已安装软件与运行方式（由 AI 自动补充）
+
+
+## 📁 目录与路径（由 AI 自动补充）
+
+
+## 🚀 服务与启动方式（由 AI 自动补充）
+
+
+## 🧯 常见问题与排查记录（由 AI 自动补充）
+
+
+## ✅ 待办事项
+
+- [ ] 
+
+---
+*本文档由 AI SSH Assistant 自动生成。*
+`,
+    network: `# {{name}} 网络设备环境文档
+
+> 连接信息: {{username}}@{{host}}:{{port}}
+> 设备类型: {{device_type_name}}
+> 创建时间: {{create_time}}
+
+## 📋 设备基本信息
+
+- **设备型号**: 
+- **主机名**: 
+- **管理 IP**: {{host}}
+- **MAC 地址**: 
+- **序列号**: 
+- **运行时间**: 
+
+## 🔌 接口配置（由 AI 自动补充）
+
+
+## 🌐 网络配置（由 AI 自动补充）
+
+
+## 🔒 安全配置（由 AI 自动补充）
+
+
+## 💾 存储与配置（由 AI 自动补充）
+
+
+## 🚨 监控与日志（由 AI 自动补充）
+
+
+## 🔧 常用命令（由 AI 自动补充）
+
+
+## 🧯 常见问题与排查记录（由 AI 自动补充）
+
+
+## ✅ 待办事项
+
+- [ ] 
+
+---
+*本文档由 AI SSH Assistant 自动生成。*
+`
+};
+
+// 根据 device_type 选择模板，network 包含 h3c/huawei/cisco/ruijie 等
+function getDocTemplateForDeviceType(deviceType) {
+    const dt = (deviceType || '').toLowerCase();
+    if (dt === 'windows') return SERVER_DOC_TEMPLATES.windows;
+    if (['h3c', 'huawei', 'cisco', 'ruijie'].includes(dt)) return SERVER_DOC_TEMPLATES.network;
+    return SERVER_DOC_TEMPLATES.linux; // linux、other 及未知类型
+}
+
+function fillDocTemplate(template, config) {
+    const now = new Date();
+    const createTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const placeholders = {
+        name: config?.name || config?.host || '服务器',
+        host: config?.host || '',
+        port: config?.port ?? 22,
+        username: config?.username || 'root',
+        create_time: createTime,
+        device_type_name: config?.device_type_name || config?.device_type_value || config?.device_type || '网络设备'
+    };
+    let out = template;
+    for (const [k, v] of Object.entries(placeholders)) {
+        out = out.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), String(v));
+    }
+    return out;
+}
+
+// 更新文档按钮启用状态与提示
+function updateServerDocButtonState(tab) {
+    const btn = document.getElementById('server-doc-btn');
+    if (!btn) return;
+    const hasServer = tab?.config?.id;
+    btn.disabled = !hasServer;
+    btn.title = hasServer ? '服务器环境文档（查看/编辑）' : '服务器环境文档（需先连接服务器）';
+}
+
+// 打开服务器文档弹窗
+async function showServerDocModal() {
+    const tab = store.activeTabId ? window.getTab(store.activeTabId) : null;
+    if (!tab?.config?.id) {
+        notify('请先连接服务器', 'warning');
+        return;
+    }
+    const serverId = tab.config.id;
+    const serverName = tab.config.name || tab.config.host || '服务器';
+    const titleEl = document.getElementById('server-doc-modal-title');
+    const contentEl = document.getElementById('server-doc-content');
+    if (titleEl) titleEl.textContent = `${serverName} - 环境文档`;
+    contentEl.value = '';
+    contentEl.dataset.serverId = String(serverId);
+    showModal('server-doc-modal');
+    try {
+        const doc = await api.getServerDoc(serverId);
+        if (doc?.content != null) contentEl.value = doc.content;
+    } catch (e) {
+        if (e?.message?.includes('404') || (e?.message && e.message.toLowerCase().includes('not found'))) {
+            const deviceType = tab.config?.device_type_value || tab.config?.device_type;
+            const template = getDocTemplateForDeviceType(deviceType);
+            contentEl.value = fillDocTemplate(template, tab.config);
+        } else {
+            notify('加载文档失败: ' + (e?.message || '未知错误'), 'error');
+        }
+    }
+    contentEl.focus();
+    contentEl.onkeydown = (e) => {
+        if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            saveServerDoc();
+        }
+    };
+}
+
+// 保存服务器文档
+async function saveServerDoc() {
+    const contentEl = document.getElementById('server-doc-content');
+    const serverId = contentEl?.dataset?.serverId;
+    if (!serverId || !contentEl) return;
+    const saveBtn = document.getElementById('server-doc-save-btn');
+    setBtnLoading(saveBtn, true);
+    try {
+        await api.updateServerDoc(parseInt(serverId, 10), contentEl.value || '');
+        notify('文档已保存', 'success');
+        closeModal('server-doc-modal');
+    } catch (e) {
+        notify('保存失败: ' + (e?.message || '未知错误'), 'error');
+    } finally {
+        setBtnLoading(saveBtn, false);
+    }
 }
 
 // 核心功能：处理发送消息
@@ -195,7 +433,7 @@ function openAISocket(messages, tab) {
 
     const roleParam = roleId ? `&role_id=${roleId}` : '';
     const tokenParam = token ? `&token=${token}` : '';
-    const contextParam = `&server_id=${serverId}&device_type=${deviceType}&server_name=${serverName}`;
+    const contextParam = `&device_type=${deviceType}&server_name=${serverName}` + (serverId ? `&server_id=${serverId}` : '');
     
     const wsUrl = `${protocol}//${window.location.host}/ws/ai?mode=${mode}${roleParam}${tokenParam}${contextParam}`;
 
@@ -253,6 +491,9 @@ function cleanTerminalOutput(raw) {
 function sendCaptureToAI(tabId, output) {
     const tab = window.getTab(tabId);
     if (!tab || isAiProcessing) return;
+
+    // 仅当捕获来源 tab 为当前激活 tab 时才发送，避免用户在切换标签后仍收到旧 tab 的 capture
+    if (tabId !== store.activeTabId) return;
 
     const cleanOutput = cleanTerminalOutput(output);
     const feedback = `命令执行结果如下：\n\`\`\`\n${cleanOutput}\n\`\`\`\n请分析结果并给出下一步建议。`;
@@ -318,8 +559,8 @@ function processAIResponseForCommands(text, msgDiv, tab) {
         msgDiv.innerHTML = '';
 
         let lastIndex = 0;
-        // 匹配 command_request 或 summary_report
-        const startRegex = /(?:```(?:json)?\s*)?\{[\s\S]*?"type"\s*:\s*"(command_request|summary_report)"/g;
+        // 匹配 command_request、summary_report 或 document_update
+        const startRegex = /(?:```(?:json)?\s*)?\{[\s\S]*?"type"\s*:\s*"(command_request|summary_report|document_update)"/g;
         let match;
         let commandFound = false;
 
@@ -372,6 +613,23 @@ function processAIResponseForCommands(text, msgDiv, tab) {
                     } else if (data.type === 'summary_report') {
                         renderSummaryReport(data.content, msgDiv);
                         autoExecuteCount = 0; // 任务达成，重置计数
+                    } else if (data.type === 'document_update' && data.content != null) {
+                        const serverId = tab?.config?.id;
+                        const card = renderDocumentUpdateCard(msgDiv, 'pending');
+                        if (serverId && api) {
+                            api.updateServerDoc(serverId, String(data.content))
+                                .then(() => {
+                                    notify('服务器环境文档已更新', 'success');
+                                    updateDocumentUpdateCard(card, true);
+                                })
+                                .catch(err => {
+                                    notify('文档更新失败: ' + (err?.message || '未知错误'), 'error');
+                                    updateDocumentUpdateCard(card, false);
+                                });
+                        } else {
+                            notify('无法更新文档：未关联服务器', 'warning');
+                            updateDocumentUpdateCard(card, false);
+                        }
                     }
                 } catch (e) {
                     // 解析失败，降级显示
@@ -417,6 +675,39 @@ function renderAutoExecuteCard(command, intent, container, tab) {
         </div>
     `;
     container.appendChild(card);
+}
+
+// 渲染文档更新卡片（pending=更新中，success/failure 由 updateDocumentUpdateCard 更新）
+function renderDocumentUpdateCard(container, status) {
+    const card = document.createElement('div');
+    card.className = 'document-update-card';
+    const isPending = status === 'pending';
+    const color = isPending ? '#0078d4' : (status ? '#4caf50' : '#f44336');
+    card.style.cssText = 'margin-top:10px;border-radius:6px;overflow:hidden;border:1px solid ' + color;
+    card.innerHTML = `
+        <div style="background:${color};color:white;padding:6px 12px;font-weight:bold;font-size:13px;">
+            <i class="fas fa-file-alt"></i> ${isPending ? '正在更新服务器环境文档...' : (status ? '服务器环境文档已更新' : '文档更新未完成')}
+        </div>
+        <div style="padding:8px 12px;background:rgba(0,0,0,0.1);font-size:12px;color:#ccc;">
+            ${isPending ? '正在保存到数据库...' : (status ? '文档已保存，可通过侧边栏文档按钮查看或编辑。' : '可能因未关联服务器或网络问题导致更新失败。')}
+        </div>
+    `;
+    container.appendChild(card);
+    return card;
+}
+
+function updateDocumentUpdateCard(card, success) {
+    if (!card) return;
+    const color = success ? '#4caf50' : '#f44336';
+    card.style.borderColor = color;
+    card.innerHTML = `
+        <div style="background:${color};color:white;padding:6px 12px;font-weight:bold;font-size:13px;">
+            <i class="fas fa-file-alt"></i> ${success ? '服务器环境文档已更新' : '文档更新未完成'}
+        </div>
+        <div style="padding:8px 12px;background:rgba(0,0,0,0.1);font-size:12px;color:#ccc;">
+            ${success ? '文档已保存，可通过侧边栏文档按钮查看或编辑。' : '可能因未关联服务器或网络问题导致更新失败。'}
+        </div>
+    `;
 }
 
 // 渲染总结报告
@@ -496,9 +787,10 @@ function executeAICommand(command, tab) {
         return;
     }
 
-    // 启动捕获模式：terminal.js 的 onmessage 会累积输出
+    // 启动捕获模式：terminal.js 的 onmessage 会累积输出（含网络设备分页自动翻页）
     tab.isCapturing = true;
     tab.captureBuffer = '';
+    tab.capturePagerCount = 0;
     if (tab.captureTimer) {
         clearTimeout(tab.captureTimer);
         tab.captureTimer = null;

@@ -177,11 +177,28 @@ function connectTerminal(tab) {
             // AI 指令执行后，捕获终端输出并在空闲 1.5 秒后通知 AI 分析
             if (tab.isCapturing) {
                 tab.captureBuffer += event.data;
+                // 网络设备分页检测：遇到 "---- More ----" 或 "--More--" 时自动发空格翻页
+                if (tab.capturePagerCount === undefined) tab.capturePagerCount = 0;
+                const MAX_PAGER_PAGES = 80;
+                const pagerPatterns = [
+                    /----\s*More\s*----/i,      // H3C/华为/锐捷
+                    /--\s*More\s*--/i,         // 思科
+                    /Press\s+.*(Continue|continue|break)/i
+                ];
+                const buf = tab.captureBuffer;
+                // 仅当 buffer 末尾出现分页提示时发空格（避免误触发或重复触发）
+                const bufTail = buf.slice(-200).replace(/\s+$/, '');
+                const hasPager = pagerPatterns.some(p => p.test(bufTail)) && tab.capturePagerCount < MAX_PAGER_PAGES;
+                if (hasPager && socket.readyState === WebSocket.OPEN) {
+                    tab.capturePagerCount++;
+                    socket.send(JSON.stringify({ type: 'data', data: ' ' }));
+                }
                 if (tab.captureTimer) clearTimeout(tab.captureTimer);
                 tab.captureTimer = setTimeout(() => {
                     if (!tab.isCapturing) return;
                     tab.isCapturing = false;
                     tab.captureTimer = null;
+                    tab.capturePagerCount = 0;
                     const output = tab.captureBuffer.trim();
                     tab.captureBuffer = '';
                     if (output) {

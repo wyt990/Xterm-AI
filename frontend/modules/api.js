@@ -53,6 +53,8 @@ export const api = {
     updateServer: (id, data) => request(`/api/servers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteServer: (id) => request(`/api/servers/${id}`, { method: 'DELETE' }),
     testServer: (data) => request('/api/servers/test', { method: 'POST', body: JSON.stringify(data) }),
+    getServerDoc: (id) => request(`/api/servers/${id}/doc`),
+    updateServerDoc: (id, content) => request(`/api/servers/${id}/doc`, { method: 'PUT', body: JSON.stringify({ content }) }),
 
     // AI 配置
     getAIEndpoints: () => request('/api/ai_endpoints'),

@@ -136,6 +136,9 @@ class SystemSettingsModel(BaseModel):
     log_backup_count: str
     log_level: str
 
+class ServerDocModel(BaseModel):
+    content: str = ""
+
 class ServerTestModel(BaseModel):
     host: str
     port: int = 22
@@ -208,6 +211,24 @@ async def update_server(server_id: int, server: ServerModel):
 @app.delete("/api/servers/{server_id}", dependencies=[Depends(verify_token)])
 async def delete_server(server_id: int):
     db.delete_server(server_id)
+    return {"status": "success"}
+
+@app.get("/api/servers/{server_id}/doc", dependencies=[Depends(verify_token)])
+async def get_server_doc(server_id: int):
+    """获取服务器文档，不存在返回 404"""
+    if not db.get_server_by_id(server_id):
+        raise HTTPException(status_code=404, detail="Server not found")
+    doc = db.get_server_doc(server_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
+@app.put("/api/servers/{server_id}/doc", dependencies=[Depends(verify_token)])
+async def update_server_doc(server_id: int, body: ServerDocModel):
+    """创建或更新服务器文档"""
+    if not db.get_server_by_id(server_id):
+        raise HTTPException(status_code=404, detail="Server not found")
+    db.upsert_server_doc(server_id, body.content)
     return {"status": "success"}
 
 @app.post("/api/servers/test", dependencies=[Depends(verify_token)])
@@ -686,7 +707,8 @@ async def ai_endpoint(
     websocket: WebSocket, 
     role_id: Optional[int] = None,
     device_type: str = "unknown",
-    server_name: str = "未选定服务器"
+    server_name: str = "未选定服务器",
+    server_id: Optional[int] = None
 ):
     if not await verify_ws_token(websocket):
         await websocket.accept()
@@ -725,6 +747,7 @@ async def ai_endpoint(
 * 严禁执行任何 Shell/Bash 命令。
 * 你必须使用该厂商特有的 CLI 命令（如 `display current-configuration`, `show version` 等）。
 * 每一行命令必须符合网络设备的交互逻辑。
+* 分页处理：display/show 类命令会分页，助手会自动翻页获取完整输出；可直接使用单条 display/show 命令。
 """
     elif dt_lower == "linux":
         env_constraints += """
@@ -741,10 +764,11 @@ async def ai_endpoint(
     # 3. 注入硬编码的命令执行协议
     command_protocol = """
 [智能运维助手 - 核心指令规范]
-1. 任务分解：请将复杂任务拆解。在每一轮回复中，你【必须且只能】发送【一个】JSON 指令块。
+1. 任务分解：请将复杂任务拆解。在每一轮回复中，你【必须且只能】发送【一个】`command_request`；但完成时可同时发送 `summary_report` 与 `document_update`。
 2. 状态管理：
    - 探测与分析：当你需要执行命令获取信息时，发送 `command_request`。
    - 任务完成：当用户需求已满足或问题已解决时，你必须发送 `summary_report`。
+   - 文档更新：当用户请求「分析服务器」「查看本机信息」「生成文档」等，或你通过多轮命令收集了服务器/设备的环境信息（OS、CPU、内存、磁盘、网络、服务等）并准备发送 `summary_report` 时，你【必须】在同一回复中，在 `summary_report` 之后追加 `document_update`，将分析结果同步到服务器环境文档，便于后续对话自动携带上下文。
 3. JSON 格式规范：
    - 执行命令：
      ```json
@@ -761,10 +785,19 @@ async def ai_endpoint(
        "content": "用 Markdown 格式编写的详细操作总结、分析报告或建议。"
      }
      ```
+   - 更新服务器文档（仅在 Agent 模式、且已有足够环境信息时使用，content 为完整 Markdown 文档）：
+     ```json
+     {
+       "type": "document_update",
+       "content": "# 服务器名 环境文档\\n> 连接信息\\n## 基本信息\\n..."
+     }
+     ```
 4. 约束：
    - 严禁一次性提供多个备选命令。
    - 严禁在没有获取足够信息的情况下盲目尝试。
    - 任务完成后必须通过 `summary_report` 闭环，不得无限制执行。
+   - document_update 的 content 需为完整文档，可复用 summary_report 的分析内容，并补充「由 AI 自动补充」的章节结构。
+   - 服务器分析类任务：summary_report 与 document_update 应在同一回复中依次出现，document_update 的 content 与报告内容一致或更结构化。
 """
     # 4. 注入技能内容（按 device_type 过滤，仅启用且绑定了该类型的技能）
     MAX_SKILL_CONTENT = 3000
@@ -797,7 +830,22 @@ async def ai_endpoint(
     except Exception as e:
         app_logger.error("技能注入", f"加载技能失败: {e}")
 
-    combined_prompt = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{skills_block}{command_protocol}"
+    # 5. 注入服务器环境文档（若存在）
+    MAX_SERVER_DOC = 5000
+    server_doc_block = ""
+    if server_id:
+        try:
+            doc = db.get_server_doc(server_id)
+            if doc and doc.get("content"):
+                content = (doc["content"] or "").strip()
+                if content:
+                    if len(content) > MAX_SERVER_DOC:
+                        content = content[:MAX_SERVER_DOC] + "\n...(已截断)"
+                    server_doc_block = f"\n\n[当前服务器环境文档 - 供诊断与决策参考]\n---\n{content}\n---\n\n"
+        except Exception as e:
+            app_logger.error("文档注入", f"加载服务器文档失败: {e}")
+
+    combined_prompt = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}{command_protocol}"
     
     # 2. 获取 AI 端点
     ai_info = None
@@ -836,8 +884,8 @@ async def ai_endpoint(
             if not messages:
                 continue
             
-            # 动态调整提示词（保持 env_constraints 与 skills_block）
-            base = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{skills_block}"
+            # 动态调整提示词（保持 env_constraints、server_doc_block 与 skills_block）
+            base = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}"
             if mode == "agent":
                 ai.system_prompt = base + command_protocol
             else:

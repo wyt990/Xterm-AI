@@ -13,7 +13,8 @@ export async function loadComponents() {
         'editor_modals.html',
         'system_modals.html',
         'device_type_modals.html',
-        'skill_modals.html'
+        'skill_modals.html',
+        'doc_modals.html'
     ];
     
     const placeholder = document.getElementById('component-placeholder');
