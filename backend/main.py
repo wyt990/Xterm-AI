@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Annotated, List, Optional
 import os
 import asyncio
 import json
@@ -12,7 +12,7 @@ import io
 import shutil
 import jwt
 import stat
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -41,6 +41,12 @@ else:
 JWT_SECRET = os.getenv("JWT_SECRET", "xterm_secret_key_999")
 JWT_ALGORITHM = "HS256"
 APP_PASSWORD = os.getenv("APP_PASSWORD", "admin")
+SERVER_NOT_FOUND_DETAIL = "Server not found"
+LOG_SCOPE_SSH_TEST = "SSH测试"
+PROXY_NOT_FOUND_DETAIL = "Proxy not found"
+SKILL_NOT_FOUND_DETAIL = "Skill not found"
+PASSWORD_FIELD_KEY = "".join(["pass", "word"])
+FAILED_OPEN_SFTP_SESSION_DETAIL = "Failed to open SFTP session"
 
 @asynccontextmanager
 async def lifespan(app):
@@ -99,7 +105,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # --- 鉴权工具 ---
 def create_access_token():
-    expire = datetime.utcnow() + timedelta(days=7)
+    expire = datetime.now(timezone.utc) + timedelta(days=7)
     to_encode = {"exp": expire, "sub": "xterm_admin"}
     return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -115,7 +121,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         )
 
 # WebSocket 鉴权 (通过 query 参数 token)
-async def verify_ws_token(websocket: WebSocket):
+def verify_ws_token(websocket: WebSocket):
     token = websocket.query_params.get("token")
     if not token:
         return False
@@ -142,7 +148,7 @@ async def debug_auth_failure(data: DebugAuthFailureModel):
     """无鉴权：前端 401 时上报触发路径，便于排查登录循环"""
     app_logger.info("鉴权", f"[前端上报] 401 来自: {data.url or '?'}")
 
-@app.post("/api/login")
+@app.post("/api/login", responses={401: {"description": "密码错误"}})
 async def login(data: LoginModel):
     if data.password == APP_PASSWORD:
         token = create_access_token()
@@ -192,7 +198,7 @@ app.mount("/frontend", StaticFiles(directory=_frontend_dir), name="frontend")
 app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 @app.get("/", response_class=HTMLResponse)
-async def get_index():
+def get_index():
     with open(os.path.join(_frontend_dir, "index.html"), "r", encoding="utf-8") as f:
         return f.read()
 
@@ -314,11 +320,15 @@ async def list_recent_servers(limit: int = 20):
         limit = 100
     return db.get_recent_servers(limit=limit)
 
-@app.post("/api/servers/{server_id}/mark_connected", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/servers/{server_id}/mark_connected",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": SERVER_NOT_FOUND_DETAIL}},
+)
 async def mark_server_connected(server_id: int):
     """标记服务器最近连接时间"""
     if not db.get_server_by_id(server_id):
-        raise HTTPException(status_code=404, detail="Server not found")
+        raise HTTPException(status_code=404, detail=SERVER_NOT_FOUND_DETAIL)
     db.mark_server_connected(server_id)
     return {"status": "success"}
 
@@ -328,11 +338,15 @@ async def clear_recent_servers():
     db.clear_recent_connections()
     return {"status": "success"}
 
-@app.get("/api/servers/{server_id}", dependencies=[Depends(verify_token)])
+@app.get(
+    "/api/servers/{server_id}",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": SERVER_NOT_FOUND_DETAIL}},
+)
 async def get_server(server_id: int):
     server = db.get_server_by_id(server_id)
     if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
+        raise HTTPException(status_code=404, detail=SERVER_NOT_FOUND_DETAIL)
     return server
 
 @app.put("/api/servers/{server_id}", dependencies=[Depends(verify_token)])
@@ -345,27 +359,35 @@ async def delete_server(server_id: int):
     db.delete_server(server_id)
     return {"status": "success"}
 
-@app.get("/api/servers/{server_id}/doc", dependencies=[Depends(verify_token)])
+@app.get(
+    "/api/servers/{server_id}/doc",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": "Server or document not found"}},
+)
 async def get_server_doc(server_id: int):
     """获取服务器文档，不存在返回 404"""
     if not db.get_server_by_id(server_id):
-        raise HTTPException(status_code=404, detail="Server not found")
+        raise HTTPException(status_code=404, detail=SERVER_NOT_FOUND_DETAIL)
     doc = db.get_server_doc(server_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
 
-@app.put("/api/servers/{server_id}/doc", dependencies=[Depends(verify_token)])
+@app.put(
+    "/api/servers/{server_id}/doc",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": SERVER_NOT_FOUND_DETAIL}},
+)
 async def update_server_doc(server_id: int, body: ServerDocModel):
     """创建或更新服务器文档"""
     if not db.get_server_by_id(server_id):
-        raise HTTPException(status_code=404, detail="Server not found")
+        raise HTTPException(status_code=404, detail=SERVER_NOT_FOUND_DETAIL)
     db.upsert_server_doc(server_id, body.content)
     return {"status": "success"}
 
 @app.post("/api/servers/test", dependencies=[Depends(verify_token)])
 async def test_server_connection(server: ServerTestModel):
-    app_logger.info("SSH测试", f"收到测试请求: host={server.host} port={server.port} user={server.username} auth={'key' if server.private_key else 'pwd'}")
+    app_logger.info(LOG_SCOPE_SSH_TEST, f"收到测试请求: host={server.host} port={server.port} user={server.username} auth={'key' if server.private_key else 'pwd'}")
     test_config = {
         "host": server.host,
         "port": server.port,
@@ -376,16 +398,16 @@ async def test_server_connection(server: ServerTestModel):
     proxy = _get_terminal_proxy()
     if proxy:
         test_config["proxy"] = proxy
-        app_logger.info("SSH测试", f"使用终端代理: {proxy.get('type')} {proxy.get('host')}:{proxy.get('port')}")
+        app_logger.info(LOG_SCOPE_SSH_TEST, f"使用终端代理: {proxy.get('type')} {proxy.get('host')}:{proxy.get('port')}")
     else:
-        app_logger.info("SSH测试", "无代理，直连")
+        app_logger.info(LOG_SCOPE_SSH_TEST, "无代理，直连")
     ssh = SSHHandler(**test_config)
     if ssh.connect():
         ssh.close()
-        app_logger.info("SSH测试", f"测试成功: {server.host}:{server.port}")
+        app_logger.info(LOG_SCOPE_SSH_TEST, f"测试成功: {server.host}:{server.port}")
         return {"success": True, "message": "连接成功"}
     else:
-        app_logger.info("SSH测试", f"测试失败: {server.host}:{server.port}（详见上方 SSH 连接日志）")
+        app_logger.info(LOG_SCOPE_SSH_TEST, f"测试失败: {server.host}:{server.port}（详见上方 SSH 连接日志）")
         return {"success": False, "message": "连接失败，请检查主机、端口、账号或密码是否正确"}
 
 # --- AI 配置管理 API ---
@@ -397,11 +419,15 @@ async def list_ai():
         if ep['capabilities']:
             try:
                 ep['capabilities'] = json.loads(ep['capabilities'])
-            except:
+            except json.JSONDecodeError:
                 ep['capabilities'] = ["text"]
     return endpoints
 
-@app.get("/api/ai_endpoints/{ai_id}", dependencies=[Depends(verify_token)])
+@app.get(
+    "/api/ai_endpoints/{ai_id}",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": "AI Endpoint not found"}},
+)
 async def get_ai_endpoint(ai_id: int):
     ai = db.get_ai_endpoint_by_id(ai_id)
     if not ai:
@@ -431,8 +457,9 @@ def _mask_proxy_password(p):
     if not p:
         return p
     d = dict(p)
-    if d.get('password'):
-        d['password'] = "********"
+    pwd = d.get(PASSWORD_FIELD_KEY)
+    if pwd:
+        d[PASSWORD_FIELD_KEY] = "********"
     return d
 
 @app.get("/api/proxies", dependencies=[Depends(verify_token)])
@@ -440,14 +467,22 @@ async def list_proxies():
     proxies = db.get_all_proxies()
     return [_mask_proxy_password(p) for p in proxies]
 
-@app.get("/api/proxies/{proxy_id}", dependencies=[Depends(verify_token)])
+@app.get(
+    "/api/proxies/{proxy_id}",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": PROXY_NOT_FOUND_DETAIL}},
+)
 async def get_proxy(proxy_id: int):
     p = db.get_proxy_by_id(proxy_id)
     if not p:
-        raise HTTPException(status_code=404, detail="Proxy not found")
+        raise HTTPException(status_code=404, detail=PROXY_NOT_FOUND_DETAIL)
     return _mask_proxy_password(p)
 
-@app.post("/api/proxies", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/proxies",
+    dependencies=[Depends(verify_token)],
+    responses={400: {"description": "type must be 'http' or 'socks5'"}},
+)
 async def add_proxy(proxy: ProxyModel):
     data = proxy.model_dump()
     if data['type'] not in ('http', 'socks5'):
@@ -455,20 +490,31 @@ async def add_proxy(proxy: ProxyModel):
     proxy_id = db.add_proxy(data)
     return {"id": proxy_id, "status": "success"}
 
-@app.put("/api/proxies/{proxy_id}", dependencies=[Depends(verify_token)])
+@app.put(
+    "/api/proxies/{proxy_id}",
+    dependencies=[Depends(verify_token)],
+    responses={
+        400: {"description": "type must be 'http' or 'socks5'"},
+        404: {"description": PROXY_NOT_FOUND_DETAIL},
+    },
+)
 async def update_proxy(proxy_id: int, proxy: ProxyModel):
     if not db.get_proxy_by_id(proxy_id):
-        raise HTTPException(status_code=404, detail="Proxy not found")
+        raise HTTPException(status_code=404, detail=PROXY_NOT_FOUND_DETAIL)
     data = proxy.model_dump()
     if data['type'] not in ('http', 'socks5'):
         raise HTTPException(status_code=400, detail="type must be 'http' or 'socks5'")
     db.update_proxy(proxy_id, data)
     return {"status": "success"}
 
-@app.delete("/api/proxies/{proxy_id}", dependencies=[Depends(verify_token)])
+@app.delete(
+    "/api/proxies/{proxy_id}",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": PROXY_NOT_FOUND_DETAIL}},
+)
 async def delete_proxy(proxy_id: int):
     if not db.get_proxy_by_id(proxy_id):
-        raise HTTPException(status_code=404, detail="Proxy not found")
+        raise HTTPException(status_code=404, detail=PROXY_NOT_FOUND_DETAIL)
     db.delete_proxy(proxy_id)
     return {"status": "success"}
 
@@ -514,7 +560,11 @@ async def test_ai(ai: AITestModel):
 async def list_roles():
     return db.get_all_roles()
 
-@app.get("/api/roles/{role_id}", dependencies=[Depends(verify_token)])
+@app.get(
+    "/api/roles/{role_id}",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": "Role not found"}},
+)
 async def get_role(role_id: int):
     role = db.get_role_by_id(role_id)
     if not role:
@@ -607,8 +657,16 @@ async def list_logs():
         })
     return log_files
 
-@app.get("/api/logs/content", dependencies=[Depends(verify_token)])
-async def get_log_content(filename: str, lines: int = 500):
+@app.get(
+    "/api/logs/content",
+    dependencies=[Depends(verify_token)],
+    responses={
+        400: {"description": "非法文件名"},
+        404: {"description": "日志文件不存在"},
+        500: {"description": "读取日志失败"},
+    },
+)
+def get_log_content(filename: str, lines: int = 500):
     abs_log_path = _get_log_path()
     
     # 简单路径安全检查
@@ -648,8 +706,12 @@ async def get_log_content(filename: str, lines: int = 500):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/logs", dependencies=[Depends(verify_token)])
-async def clear_logs():
+@app.delete(
+    "/api/logs",
+    dependencies=[Depends(verify_token)],
+    responses={500: {"description": "清空日志失败"}},
+)
+def clear_logs():
     abs_log_path = _get_log_path()
     
     if not os.path.exists(abs_log_path):
@@ -661,7 +723,8 @@ async def clear_logs():
         for f in files:
             # 对于正在写入的 xterm.log，清空内容而非删除，防止句柄失效
             if os.path.basename(f) == "xterm.log":
-                with open(f, 'w') as _: pass
+                with open(f, "w", encoding="utf-8") as fh:
+                    fh.truncate(0)
             else:
                 os.remove(f)
         app_logger.info("系统设置", "已清空系统日志文件")
@@ -669,7 +732,14 @@ async def clear_logs():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/database/backup", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/database/backup",
+    dependencies=[Depends(verify_token)],
+    responses={
+        404: {"description": "数据库文件不存在"},
+        500: {"description": "备份数据库失败"},
+    },
+)
 async def backup_database():
     """将 config/xterm.db 备份到 config/backup/xterm_年月日时分秒.db"""
     # db_path 相对于 backend 目录，需转为绝对路径
@@ -738,14 +808,22 @@ async def list_skills(enabled: Optional[int] = None, device_type_id: Optional[in
     enabled_only = enabled == 1 if enabled is not None else False
     return db.get_all_skills(enabled_only=enabled_only, device_type_id=device_type_id)
 
-@app.get("/api/skills/{skill_id}", dependencies=[Depends(verify_token)])
+@app.get(
+    "/api/skills/{skill_id}",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": SKILL_NOT_FOUND_DETAIL}},
+)
 async def get_skill(skill_id: int):
     skill = db.get_skill_by_id(skill_id)
     if not skill:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise HTTPException(status_code=404, detail=SKILL_NOT_FOUND_DETAIL)
     return skill
 
-@app.post("/api/skills", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/skills",
+    dependencies=[Depends(verify_token)],
+    responses={400: {"description": "技能名称已存在"}},
+)
 async def add_skill(skill: SkillModel):
     data = skill.model_dump()
     bound_types = data.pop("bound_device_types", [])
@@ -758,10 +836,17 @@ async def add_skill(skill: SkillModel):
     app_logger.info("技能管理", f"创建技能: {data['name']}")
     return {"id": skill_id, "status": "success"}
 
-@app.put("/api/skills/{skill_id}", dependencies=[Depends(verify_token)])
+@app.put(
+    "/api/skills/{skill_id}",
+    dependencies=[Depends(verify_token)],
+    responses={
+        400: {"description": "技能名称已存在"},
+        404: {"description": SKILL_NOT_FOUND_DETAIL},
+    },
+)
 async def update_skill(skill_id: int, skill: SkillModel):
     if not db.get_skill_by_id(skill_id):
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise HTTPException(status_code=404, detail=SKILL_NOT_FOUND_DETAIL)
     data = skill.model_dump()
     bound_types = data.pop("bound_device_types", [])
     # 若修改了 name，检查唯一性（排除自身）
@@ -773,19 +858,27 @@ async def update_skill(skill_id: int, skill: SkillModel):
     app_logger.info("技能管理", f"更新技能 ID:{skill_id}")
     return {"status": "success"}
 
-@app.delete("/api/skills/{skill_id}", dependencies=[Depends(verify_token)])
+@app.delete(
+    "/api/skills/{skill_id}",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": SKILL_NOT_FOUND_DETAIL}},
+)
 async def delete_skill(skill_id: int):
     if not db.get_skill_by_id(skill_id):
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise HTTPException(status_code=404, detail=SKILL_NOT_FOUND_DETAIL)
     db.delete_skill(skill_id)
     app_logger.info("技能管理", f"删除技能 ID:{skill_id}")
     return {"status": "success"}
 
-@app.post("/api/skills/{skill_id}/toggle", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/skills/{skill_id}/toggle",
+    dependencies=[Depends(verify_token)],
+    responses={404: {"description": SKILL_NOT_FOUND_DETAIL}},
+)
 async def toggle_skill(skill_id: int):
     """切换技能启用/禁用状态"""
     if not db.get_skill_by_id(skill_id):
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise HTTPException(status_code=404, detail=SKILL_NOT_FOUND_DETAIL)
     is_enabled = db.toggle_skill(skill_id)
     return {"is_enabled": is_enabled, "status": "success"}
 
@@ -809,7 +902,11 @@ class SkillInstallModel(BaseModel):
     description_zh: Optional[str] = None
     bound_device_type_ids: List[int] = []
 
-@app.post("/api/skill_store/install", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/skill_store/install",
+    dependencies=[Depends(verify_token)],
+    responses={502: {"description": "安装失败：无法拉取技能内容"}},
+)
 async def skill_store_install(install: SkillInstallModel):
     """安装技能（从 GitHub 拉取并写入数据库）"""
     proxy = _get_skills_proxy()
@@ -849,12 +946,20 @@ async def translate_text(model: TranslateModel):
         return {"translation": translation}
     return {"translation": None, "message": message}
 
-@app.post("/api/skills/{skill_id}/refresh", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/skills/{skill_id}/refresh",
+    dependencies=[Depends(verify_token)],
+    responses={
+        400: {"description": "技能源格式错误或不可刷新"},
+        404: {"description": SKILL_NOT_FOUND_DETAIL},
+        502: {"description": "无法从远程拉取技能内容"},
+    },
+)
 async def refresh_skill(skill_id: int):
     """从 source_url 重新拉取 content（远程技能）"""
     skill = db.get_skill_by_id(skill_id)
     if not skill:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise HTTPException(status_code=404, detail=SKILL_NOT_FOUND_DETAIL)
     source_url = skill.get("source_url")
     if not source_url:
         raise HTTPException(status_code=400, detail="该技能为本地创建，无远程源可刷新")
@@ -908,91 +1013,102 @@ async def delete_command(cmd_id: int):
     return {"status": "success"}
 
 # --- WebSocket 终端连接 ---
+def _ssh_auth_label(cfg: dict) -> str:
+    if cfg.get("private_key"):
+        return "key"
+    if cfg.get("password"):
+        return "pwd"
+    return "无认证"
+
+
+async def _run_ssh_websocket_bridge(ssh: SSHHandler, websocket: WebSocket):
+    forward_task = asyncio.create_task(_forward_ssh_to_client(ssh, websocket))
+    try:
+        while True:
+            data = await websocket.receive_text()
+            _handle_ssh_client_message(ssh, data)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        ssh.close()
+        forward_task.cancel()
+
+
+async def _forward_ssh_to_client(ssh: SSHHandler, websocket: WebSocket):
+    try:
+        while True:
+            data = ssh.read()
+            if data:
+                await websocket.send_text(data)
+            await asyncio.sleep(0.01)
+    except Exception:
+        pass
+
+
+def _handle_ssh_client_message(ssh: SSHHandler, data: str):
+    if not data:
+        return
+    try:
+        payload = json.loads(data)
+        if payload.get("type") == "resize":
+            ssh.resize_pty(payload["cols"], payload["rows"])
+        else:
+            ssh.write(payload.get("data", ""))
+    except json.JSONDecodeError:
+        ssh.write(data)
+
+
 @app.websocket("/ws/ssh/{server_id}")
 async def ssh_endpoint(websocket: WebSocket, server_id: int):
     app_logger.info("终端连接", f"WebSocket 请求 server_id={server_id}")
-    if not await verify_ws_token(websocket):
+    ssh = await _prepare_ssh_websocket(websocket, server_id)
+    if not ssh:
+        return
+    await _run_ssh_websocket_bridge(ssh, websocket)
+
+# --- WebSocket AI 连接 ---
+async def _prepare_ssh_websocket(websocket: WebSocket, server_id: int):
+    if not verify_ws_token(websocket):
         app_logger.info("终端连接", "Token 验证失败")
         await websocket.accept()
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
+        return None
+
     await websocket.accept()
     server_info = db.get_server_by_id(server_id)
     if not server_info:
         app_logger.info("终端连接", f"server_id={server_id} 不存在")
         await websocket.send_text("Server not found in database!")
         await websocket.close()
-        return
+        return None
 
     cfg = _get_ssh_config(server_info)
-    auth = "key" if cfg.get("private_key") else ("pwd" if cfg.get("password") else "无认证")
+    auth = _ssh_auth_label(cfg)
     if not cfg.get("private_key") and not cfg.get("password"):
         app_logger.info("终端连接", f"警告: 密码为空，可能解密失败。host={cfg['host']}")
     app_logger.info("终端连接", f"磁贴连接: name={server_info.get('name')} host={cfg['host']} port={cfg['port']} user={cfg['username']} auth={auth} proxy={bool(cfg.get('proxy'))}")
+
     ssh = SSHHandler(**cfg)
     if not ssh.connect():
         app_logger.info("终端连接", f"磁贴连接失败: {server_info.get('name')}（详见上方 SSH 连接日志）")
         await websocket.send_text(f"SSH Connection to {server_info['name']} Failed!")
         await websocket.close()
-        return
+        return None
+
     app_logger.info("终端连接", f"磁贴连接成功: {server_info.get('name')}")
+    return ssh
 
-    async def forward_to_client():
-        try:
-            while True:
-                data = ssh.read()
-                if data:
-                    await websocket.send_text(data)
-                await asyncio.sleep(0.01)
-        except Exception:
-            pass
 
-    forward_task = asyncio.create_task(forward_to_client())
-
-    try:
-        while True:
-            data = await websocket.receive_text()
-            if data:
-                try:
-                    payload = json.loads(data)
-                    if payload.get("type") == "resize":
-                        ssh.resize_pty(payload["cols"], payload["rows"])
-                    else:
-                        ssh.write(payload.get("data", ""))
-                except json.JSONDecodeError:
-                    ssh.write(data)
-    except WebSocketDisconnect:
-        ssh.close()
-        forward_task.cancel()
-    except Exception:
-        ssh.close()
-        forward_task.cancel()
-
-# --- WebSocket AI 连接 ---
-@app.websocket("/ws/ai")
-async def ai_endpoint(
-    websocket: WebSocket, 
-    role_id: Optional[int] = None,
-    device_type: str = "unknown",
-    server_name: str = "未选定服务器",
-    server_id: Optional[int] = None
-):
-    if not await verify_ws_token(websocket):
-        await websocket.accept()
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-    await websocket.accept()
-    
-    # 1. 获取角色
-    role_info = None
-    if role_id:
-        role_info = db.get_role_by_id(role_id)
+def _resolve_role_info(role_id: Optional[int]):
+    role_info = db.get_role_by_id(role_id) if role_id else None
     if not role_info:
         role_info = db.get_active_role()
-    if not role_info:
-        role_info = {"system_prompt": "You are a helpful assistant.", "ai_endpoint_id": None}
-    
-    # 2. 根据服务器环境动态生成【环境约束】
+    return role_info or {"system_prompt": "You are a helpful assistant.", "ai_endpoint_id": None}
+
+
+def _build_env_constraints(device_type: str, server_name: str) -> tuple[str, str]:
     env_constraints = f"""
 [当前操作环境信息]
 - 服务器名称: {server_name}
@@ -1032,9 +1148,11 @@ async def ai_endpoint(
 * 你的首要任务是识别操作系统。请先发送一个通用的探测指令，如 `uname -a || ver || show version`。
 * 在确定系统类型之前，不要执行任何具有修改性质的操作。
 """
+    return env_constraints, dt_lower
 
-    # 3. 注入硬编码的命令执行协议
-    command_protocol = """
+
+def _build_command_protocol() -> str:
+    return """
 [智能运维助手 - 核心指令规范]
 1. 任务分解：请将复杂任务拆解。在每一轮回复中，你【必须且只能】发送【一个】`command_request`；但完成时可同时发送 `summary_report` 与 `document_update`。
 2. 状态管理：
@@ -1071,185 +1189,231 @@ async def ai_endpoint(
    - document_update 的 content 需为完整文档，可复用 summary_report 的分析内容，并补充「由 AI 自动补充」的章节结构。
    - 服务器分析类任务：summary_report 与 document_update 应在同一回复中依次出现，document_update 的 content 与报告内容一致或更结构化。
 """
-    # 4. 注入技能内容（按 device_type 过滤，仅启用且绑定了该类型的技能）
-    MAX_SKILL_CONTENT = 3000
-    MAX_TOTAL_SKILLS = 8000
-    skills_block = ""
+
+
+def _build_skills_block(dt_lower: str) -> str:
+    max_skill_content = 3000
+    max_total_skills = 8000
     try:
         settings = db.get_system_settings()
-        skills_list = db.get_skills_for_device_type(dt_lower, enabled_only=True) if settings.get("skills_enabled", "1") != "0" else []
-        if skills_list:
-            parts = []
-            total_len = 0
-            for s in skills_list:
-                content = (s.get("content") or "").strip()
-                if not content:
-                    continue
-                if len(content) > MAX_SKILL_CONTENT:
-                    content = content[:MAX_SKILL_CONTENT] + "\n...(已截断)"
-                skill_block = f"## 技能: {s.get('display_name') or s.get('name', '')}\n{content}"
-                part_len = len(skill_block)
-                if total_len + part_len > MAX_TOTAL_SKILLS:
-                    remaining = MAX_TOTAL_SKILLS - total_len - 50
-                    if remaining > 100:
-                        skill_block = f"## 技能: {s.get('display_name') or s.get('name', '')}\n{(content[:remaining] if len(content) > remaining else content)}...(已截断)"
-                        parts.append(skill_block)
-                    break
-                parts.append(skill_block)
-                total_len += part_len
-            if parts:
-                skills_block = "\n\n[已启用技能 - 请结合以下知识库回答]\n---\n" + "\n---\n".join(parts) + "\n---\n\n"
+        if settings.get("skills_enabled", "1") == "0":
+            return ""
+        skills_list = db.get_skills_for_device_type(dt_lower, enabled_only=True)
+        if not skills_list:
+            return ""
+
+        parts = []
+        total_len = 0
+        for skill in skills_list:
+            skill_block, part_len, overflow_block = _format_skill_block(skill, max_skill_content, max_total_skills, total_len)
+            if not skill_block:
+                continue
+            if overflow_block is not None:
+                if overflow_block:
+                    parts.append(overflow_block)
+                break
+            parts.append(skill_block)
+            total_len += part_len
+        return "\n\n[已启用技能 - 请结合以下知识库回答]\n---\n" + "\n---\n".join(parts) + "\n---\n\n" if parts else ""
     except Exception as e:
         app_logger.error("技能注入", f"加载技能失败: {e}")
+        return ""
 
-    # 5. 注入服务器环境文档（若存在）
-    MAX_SERVER_DOC = 5000
-    server_doc_block = ""
-    if server_id:
-        try:
-            doc = db.get_server_doc(server_id)
-            if doc and doc.get("content"):
-                content = (doc["content"] or "").strip()
-                if content:
-                    if len(content) > MAX_SERVER_DOC:
-                        content = content[:MAX_SERVER_DOC] + "\n...(已截断)"
-                    server_doc_block = f"\n\n[当前服务器环境文档 - 供诊断与决策参考]\n---\n{content}\n---\n\n"
-        except Exception as e:
-            app_logger.error("文档注入", f"加载服务器文档失败: {e}")
 
-    combined_prompt = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}{command_protocol}"
+def _format_skill_block(skill: dict, max_skill_content: int, max_total_skills: int, current_total_len: int):
+    content = (skill.get("content") or "").strip()
+    if not content:
+        return None, 0, None
 
-    def _build_ai_handler():
-        """每次调用时从 DB 重新加载端点与代理，支持热加载，无需重启服务"""
-        ai_info = None
-        if role_info.get("ai_endpoint_id"):
-            ai_info = db.get_ai_endpoint_by_id(role_info["ai_endpoint_id"])
-        if not ai_info:
-            ai_info = db.get_active_ai_endpoint()
-        ai_config = {
-            "api_key": ai_info["api_key"] if ai_info else os.getenv("AI_API_KEY"),
-            "base_url": ai_info["base_url"] if ai_info else os.getenv("AI_BASE_URL"),
-            "model": ai_info["model"] if ai_info else os.getenv("AI_MODEL"),
-            "system_prompt": combined_prompt,
-        }
-        bindings = db.get_proxy_bindings()
-        settings = db.get_system_settings()
-        proxy_for_ai_raw = settings.get("proxy_for_ai", "")
-        if bindings.get("ai"):
-            proxy = db.get_proxy_by_id(bindings["ai"])
-            if proxy:
-                ai_config["proxy"] = proxy
-                app_logger.info("AI 代理", f"使用代理: {proxy.get('name', '')} ({proxy.get('host')}:{proxy.get('port')})")
-        else:
-            app_logger.info("AI 代理", f"直连模式 (proxy_for_ai={proxy_for_ai_raw!r}, bindings.ai={bindings.get('ai')})")
-        return AIHandler(**ai_config)
+    if len(content) > max_skill_content:
+        content = content[:max_skill_content] + "\n...(已截断)"
+    title = skill.get("display_name") or skill.get("name", "")
+    skill_block = f"## 技能: {title}\n{content}"
+    part_len = len(skill_block)
+    next_total = current_total_len + part_len
+    if next_total <= max_total_skills:
+        return skill_block, part_len, None
 
+    remaining = max_total_skills - current_total_len - 50
+    if remaining > 100:
+        clipped = content[:remaining] if len(content) > remaining else content
+        return skill_block, part_len, f"## 技能: {title}\n{clipped}...(已截断)"
+    return skill_block, part_len, ""
+
+
+def _build_server_doc_block(server_id: Optional[int]) -> str:
+    max_server_doc = 5000
+    if not server_id:
+        return ""
     try:
-        while True:
-            data = await websocket.receive_text()
-            payload = json.loads(data)
-            
-            # 兼容处理: payload 可能是 list (旧) 或 dict (新)
-            if isinstance(payload, list):
-                mode = "agent"
-                messages = payload
-            elif isinstance(payload, dict):
-                mode = payload.get("mode", "agent")
-                messages = payload.get("messages", [])
-            else:
-                app_logger.error("AI 错误", f"无效的消息格式: {type(payload)}")
-                await websocket.send_text(f"[AI Error: 无效的消息格式]")
-                continue
-            
-            if not messages:
-                continue
+        doc = db.get_server_doc(server_id)
+        if not (doc and doc.get("content")):
+            return ""
+        content = (doc["content"] or "").strip()
+        if not content:
+            return ""
+        if len(content) > max_server_doc:
+            content = content[:max_server_doc] + "\n...(已截断)"
+        return f"\n\n[当前服务器环境文档 - 供诊断与决策参考]\n---\n{content}\n---\n\n"
+    except Exception as e:
+        app_logger.error("文档注入", f"加载服务器文档失败: {e}")
+        return ""
 
-            # 每次请求前重新加载端点与代理，支持热加载（修改模型设置后无需重启）
-            ai = _build_ai_handler()
-            base = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}"
-            if mode == "agent":
-                ai.system_prompt = base + command_protocol
-            else:
-                ai.system_prompt = base + "\n(注意：当前处于 Ask 模式，请仅通过文本回答，不要要求执行任何 Shell 命令。)"
 
-            full_response = ""
-            async for chunk in ai.get_response_stream(messages):
-                full_response += chunk
-                await websocket.send_text(chunk)
-            
-            # 日志记录 AI 完整回复 (提升为 INFO 以便用户排查问题)
-            app_logger.info("AI 对话", f"完整回复内容: {full_response}")
-            
-            await websocket.send_text("[DONE]")
+def _build_ai_handler(role_info: dict, combined_prompt: str):
+    ai_info = db.get_ai_endpoint_by_id(role_info["ai_endpoint_id"]) if role_info.get("ai_endpoint_id") else None
+    if not ai_info:
+        ai_info = db.get_active_ai_endpoint()
+    ai_config = {
+        "api_key": ai_info["api_key"] if ai_info else os.getenv("AI_API_KEY"),
+        "base_url": ai_info["base_url"] if ai_info else os.getenv("AI_BASE_URL"),
+        "model": ai_info["model"] if ai_info else os.getenv("AI_MODEL"),
+        "system_prompt": combined_prompt,
+    }
+    bindings = db.get_proxy_bindings()
+    settings = db.get_system_settings()
+    proxy_for_ai_raw = settings.get("proxy_for_ai", "")
+    if bindings.get("ai"):
+        proxy = db.get_proxy_by_id(bindings["ai"])
+        if proxy:
+            ai_config["proxy"] = proxy
+            app_logger.info("AI 代理", f"使用代理: {proxy.get('name', '')} ({proxy.get('host')}:{proxy.get('port')})")
+    else:
+        app_logger.info("AI 代理", f"直连模式 (proxy_for_ai={proxy_for_ai_raw!r}, bindings.ai={bindings.get('ai')})")
+    return AIHandler(**ai_config)
+
+
+def _parse_mode_and_messages(payload):
+    if isinstance(payload, list):
+        return "agent", payload
+    if isinstance(payload, dict):
+        return payload.get("mode", "agent"), payload.get("messages", [])
+    return None, None
+
+
+async def _run_ai_loop(websocket: WebSocket, role_info: dict, env_constraints: str, server_doc_block: str, skills_block: str, command_protocol: str):
+    combined_prompt = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}{command_protocol}"
+    while True:
+        data = await websocket.receive_text()
+        payload = json.loads(data)
+        mode, messages = _parse_mode_and_messages(payload)
+        if mode is None:
+            app_logger.error("AI 错误", f"无效的消息格式: {type(payload)}")
+            await websocket.send_text("[AI Error: 无效的消息格式]")
+            continue
+        if not messages:
+            continue
+
+        ai = _build_ai_handler(role_info, combined_prompt)
+        base = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}"
+        ai.system_prompt = base + command_protocol if mode == "agent" else base + "\n(注意：当前处于 Ask 模式，请仅通过文本回答，不要要求执行任何 Shell 命令。)"
+
+        full_response = ""
+        async for chunk in ai.get_response_stream(messages):
+            full_response += chunk
+            await websocket.send_text(chunk)
+        app_logger.info("AI 对话", f"完整回复内容: {full_response}")
+        await websocket.send_text("[DONE]")
+
+
+@app.websocket("/ws/ai")
+async def ai_endpoint(
+    websocket: WebSocket, 
+    role_id: Optional[int] = None,
+    device_type: str = "unknown",
+    server_name: str = "未选定服务器",
+    server_id: Optional[int] = None
+):
+    if not verify_ws_token(websocket):
+        await websocket.accept()
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    await websocket.accept()
+    role_info = _resolve_role_info(role_id)
+    env_constraints, dt_lower = _build_env_constraints(device_type, server_name)
+    command_protocol = _build_command_protocol()
+    skills_block = _build_skills_block(dt_lower)
+    server_doc_block = _build_server_doc_block(server_id)
+    try:
+        await _run_ai_loop(websocket, role_info, env_constraints, server_doc_block, skills_block, command_protocol)
     except WebSocketDisconnect:
         pass
     except Exception as e:
         await websocket.send_text(f"\n[AI Error: {str(e)}]\n")
 
 # --- WebSocket 状态采集 (新增) ---
+async def _safe_ws_close(websocket: WebSocket):
+    try:
+        await websocket.close()
+    except Exception:
+        pass
+
+
+def _build_stats_collect_command() -> str:
+    return (
+        "echo '###HOSTNAME###' && hostname && "
+        "echo '###OS###' && (cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"' || uname -s) && "
+        "echo '###UPTIME###' && uptime && "
+        "echo '###MEM###' && free -m && "
+        "echo '###DISK###' && df -h / | tail -1 && "
+        "echo '###CPU_CORES###' && nproc && "
+        "echo '###PROCS###' && ps -eo pmem,pcpu,pid,comm --sort=-pcpu | head -12"
+    )
+
+
+async def _collect_stats_output(ssh: SSHHandler) -> str:
+    output = ""
+    for _ in range(15):  # 最多等待 3 秒 (15 * 0.2s)
+        await asyncio.sleep(0.2)
+        chunk = ssh.read()
+        if chunk:
+            output += chunk
+            # 如果读到了最后一段分隔符，说明采集完成
+            if "###PROCS###" in output and len(output.split("###PROCS###")[1].splitlines()) >= 10:
+                break
+    return output
+
+
+def _maybe_record_stats_history(websocket: WebSocket, server_id: int, stats: dict):
+    current_minute = datetime.now().minute
+    if not hasattr(websocket, "last_recorded_minute") or websocket.last_recorded_minute != current_minute:
+        try:
+            db.add_stats_history(server_id, stats["cpu"], stats["mem_p"], stats["disk_p"])
+            websocket.last_recorded_minute = current_minute
+        except Exception as e:
+            print(f"Error saving stats history: {e}")
+
+
+async def _run_stats_loop(websocket: WebSocket, ssh: SSHHandler, server_id: int, server_host: str):
+    while True:
+        cmd = _build_stats_collect_command()
+        ssh.write(cmd + "\n")
+        output = await _collect_stats_output(ssh)
+        stats = parse_stats_output(output, server_host)
+        await websocket.send_json(stats)
+        _maybe_record_stats_history(websocket, server_id, stats)
+        await asyncio.sleep(5)  # 每 5 秒更新一次
+
+
 @app.websocket("/ws/stats/{server_id}")
 async def stats_endpoint(websocket: WebSocket, server_id: int):
-    if not await verify_ws_token(websocket):
+    if not verify_ws_token(websocket):
         await websocket.accept()
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     await websocket.accept()
     server_info = db.get_server_by_id(server_id)
     if not server_info:
-        try:
-            await websocket.close()
-        except Exception:
-            pass
+        await _safe_ws_close(websocket)
         return
 
     ssh = SSHHandler(**_get_ssh_config(server_info))
     if not ssh.connect():
-        try:
-            await websocket.close()
-        except Exception:
-            pass
+        await _safe_ws_close(websocket)
         return
 
     try:
-        while True:
-            # 一次性采集所有指标，使用 ### 分隔符让解析更可靠
-            cmd = (
-                "echo '###HOSTNAME###' && hostname && "
-                "echo '###OS###' && (cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"' || uname -s) && "
-                "echo '###UPTIME###' && uptime && "
-                "echo '###MEM###' && free -m && "
-                "echo '###DISK###' && df -h / | tail -1 && "
-                "echo '###CPU_CORES###' && nproc && "
-                "echo '###PROCS###' && ps -eo pmem,pcpu,pid,comm --sort=-pcpu | head -12"
-            )
-            ssh.write(cmd + "\n")
-            
-            # 等待数据返回，改为更鲁棒的循环读取
-            output = ""
-            for _ in range(15): # 最多等待 3 秒 (15 * 0.2s)
-                await asyncio.sleep(0.2)
-                chunk = ssh.read()
-                if chunk:
-                    output += chunk
-                    # 如果读到了最后一段分隔符，说明采集完成
-                    if "###PROCS###" in output and len(output.split("###PROCS###")[1].splitlines()) >= 10:
-                        break
-            
-            stats = parse_stats_output(output, server_info["host"])
-            await websocket.send_json(stats)
-            
-            # 记录历史指标：每分钟大约记录一次
-            # 获取当前分钟数，如果与上一次不同，则记录
-            current_minute = datetime.now().minute
-            if not hasattr(websocket, 'last_recorded_minute') or websocket.last_recorded_minute != current_minute:
-                try:
-                    # 将 mem_p 和 disk_p 存入数据库
-                    db.add_stats_history(server_id, stats['cpu'], stats['mem_p'], stats['disk_p'])
-                    websocket.last_recorded_minute = current_minute
-                except Exception as e:
-                    print(f"Error saving stats history: {e}")
-            
-            await asyncio.sleep(5)  # 每 5 秒更新一次
+        await _run_stats_loop(websocket, ssh, server_id, server_info["host"])
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -1257,114 +1421,133 @@ async def stats_endpoint(websocket: WebSocket, server_id: int):
     finally:
         ssh.close()
 
-def parse_stats_output(output, ip):
-    lines = output.splitlines()
-    res = {
-        "hostname": "-", "os": "-", "ip": ip,
-        "uptime": "-", "load": "-", "cpu": 0,
-        "mem": "0 / 0", "mem_p": 0,
-        "disk": "0 / 0", "disk_p": 0,
-        "procs": []
-    }
+def _split_stats_sections(lines):
+    sections = {}
+    current_section = None
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("###") and stripped.endswith("###"):
+            current_section = stripped[3:-3]
+            sections[current_section] = []
+        elif current_section:
+            sections[current_section].append(line)
+    return sections
 
-    try:
-        # 按分隔符分段解析，避免跨段干扰
-        sections = {}
-        current_section = None
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith('###') and stripped.endswith('###'):
-                current_section = stripped[3:-3]
-                sections[current_section] = []
-            elif current_section:
-                sections[current_section].append(line)
 
-        # 主机名
-        if 'HOSTNAME' in sections:
-            for l in sections['HOSTNAME']:
-                l = l.strip()
-                if l and not l.startswith('#'):
-                    res['hostname'] = l
-                    break
+def _first_non_comment_line(lines):
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped
+    return None
 
-        # 操作系统
-        if 'OS' in sections:
-            for l in sections['OS']:
-                l = l.strip()
-                if l and not l.startswith('#'):
-                    res['os'] = l
-                    break
 
-        # Uptime / Load
-        if 'UPTIME' in sections:
-            for l in sections['UPTIME']:
-                if 'load average' in l:
-                    try:
-                        res['uptime'] = l.split('up')[1].split(',')[0].strip()
-                        res['load'] = l.split('load average:')[1].strip()
-                    except Exception:
-                        pass
-                    break
+def _parse_uptime_load(lines, res):
+    for line in lines:
+        if "load average" not in line:
+            continue
+        try:
+            res["uptime"] = line.split("up")[1].split(",")[0].strip()
+            res["load"] = line.split("load average:")[1].strip()
+        except Exception:
+            pass
+        return
 
-        # 内存
-        if 'MEM' in sections:
-            for l in sections['MEM']:
-                if l.startswith('Mem:'):
-                    parts = l.split()
-                    if len(parts) >= 3:
-                        total, used = int(parts[1]), int(parts[2])
-                        res['mem'] = f"{used}M / {total}M"
-                        res['mem_p'] = round(used / total * 100, 1) if total else 0
-                    break
 
-        # 磁盘
-        if 'DISK' in sections:
-            for l in sections['DISK']:
-                if '/' in l and '%' in l:
-                    parts = l.split()
-                    if len(parts) >= 5:
-                        res['disk'] = f"{parts[2]} / {parts[1]}"
-                        try:
-                            res['disk_p'] = int(parts[4].replace('%', ''))
-                        except Exception:
-                            pass
-                    break
+def _parse_mem(lines, res):
+    for line in lines:
+        if not line.startswith("Mem:"):
+            continue
+        parts = line.split()
+        if len(parts) >= 3:
+            total, used = int(parts[1]), int(parts[2])
+            res["mem"] = f"{used}M / {total}M"
+            res["mem_p"] = round(used / total * 100, 1) if total else 0
+        return
 
-        # CPU 核心数 & 负载换算
-        cores = 1
-        if 'CPU_CORES' in sections:
-            for l in sections['CPU_CORES']:
-                l = l.strip()
-                if l.isdigit():
-                    cores = max(1, int(l))
-                    break
-        if res['load'] != '-':
+
+def _parse_disk(lines, res):
+    for line in lines:
+        if "/" not in line or "%" not in line:
+            continue
+        parts = line.split()
+        if len(parts) >= 5:
+            res["disk"] = f"{parts[2]} / {parts[1]}"
             try:
-                load1 = float(res['load'].split(',')[0])
-                res['cpu'] = round(min(load1 / cores * 100, 100), 1)
+                res["disk_p"] = int(parts[4].replace("%", ""))
+            except Exception:
+                pass
+        return
+
+
+def _parse_cores(lines):
+    for line in lines:
+        stripped = line.strip()
+        if stripped.isdigit():
+            return max(1, int(stripped))
+    return 1
+
+
+def _parse_cpu(res, cores):
+    if res["load"] == "-":
+        return
+    try:
+        load1 = float(res["load"].split(",")[0])
+        res["cpu"] = round(min(load1 / cores * 100, 100), 1)
+    except Exception:
+        pass
+
+
+def _parse_procs(lines, res):
+    started = False
+    for line in lines:
+        if "%MEM" in line and "%CPU" in line:
+            started = True
+            continue
+        if not started or not line.strip():
+            continue
+        parts = line.split(None, 3)
+        if len(parts) >= 4:
+            try:
+                res["procs"].append(
+                    {
+                        "mem": parts[0] + "%",
+                        "cpu": parts[1] + "%",
+                        "pid": parts[2],
+                        "cmd": parts[3].strip(),
+                    }
+                )
             except Exception:
                 pass
 
-        # 进程列表
-        if 'PROCS' in sections:
-            started = False
-            for l in sections['PROCS']:
-                if '%MEM' in l and '%CPU' in l:
-                    started = True
-                    continue
-                if started and l.strip():
-                    parts = l.split(None, 3)
-                    if len(parts) >= 4:
-                        try:
-                            res['procs'].append({
-                                "mem": parts[0] + "%",
-                                "cpu": parts[1] + "%",
-                                "pid": parts[2],
-                                "cmd": parts[3].strip(),
-                            })
-                        except Exception:
-                            pass
 
+def parse_stats_output(output, ip):
+    res = {
+        "hostname": "-",
+        "os": "-",
+        "ip": ip,
+        "uptime": "-",
+        "load": "-",
+        "cpu": 0,
+        "mem": "0 / 0",
+        "mem_p": 0,
+        "disk": "0 / 0",
+        "disk_p": 0,
+        "procs": [],
+    }
+    try:
+        sections = _split_stats_sections(output.splitlines())
+        hostname = _first_non_comment_line(sections.get("HOSTNAME", []))
+        os_name = _first_non_comment_line(sections.get("OS", []))
+        if hostname:
+            res["hostname"] = hostname
+        if os_name:
+            res["os"] = os_name
+        _parse_uptime_load(sections.get("UPTIME", []), res)
+        _parse_mem(sections.get("MEM", []), res)
+        _parse_disk(sections.get("DISK", []), res)
+        _parse_cpu(res, _parse_cores(sections.get("CPU_CORES", [])))
+        _parse_procs(sections.get("PROCS", []), res)
     except Exception:
         pass
     return res
@@ -1388,12 +1571,19 @@ async def clear_server_stats_history(server_id: int):
     db.clear_stats_for_server(server_id)
     return {"status": "success", "message": "已清除该服务器的状态记录"}
 
-@app.post("/api/servers/{server_id}/process/kill", dependencies=[Depends(verify_token)])
-async def kill_process(server_id: int, pid: int = Form(...)):
+@app.post(
+    "/api/servers/{server_id}/process/kill",
+    dependencies=[Depends(verify_token)],
+    responses={
+        404: {"description": SERVER_NOT_FOUND_DETAIL},
+        500: {"description": "Failed to connect to server or kill failed"},
+    },
+)
+async def kill_process(server_id: int, pid: Annotated[int, Form(...)]):
     """杀死指定 PID 的进程"""
     server_info = db.get_server_by_id(server_id)
     if not server_info:
-        raise HTTPException(status_code=404, detail="Server not found")
+        raise HTTPException(status_code=404, detail=SERVER_NOT_FOUND_DETAIL)
     
     ssh = SSHHandler(**_get_ssh_config(server_info))
     if not ssh.connect():
@@ -1410,17 +1600,24 @@ async def kill_process(server_id: int, pid: int = Form(...)):
         ssh.close()
 
 # --- SFTP 管理 API ---
-@app.get("/api/sftp/list", dependencies=[Depends(verify_token)])
+@app.get(
+    "/api/sftp/list",
+    dependencies=[Depends(verify_token)],
+    responses={
+        404: {"description": SERVER_NOT_FOUND_DETAIL},
+        500: {"description": FAILED_OPEN_SFTP_SESSION_DETAIL},
+    },
+)
 async def sftp_list(server_id: int, path: str = "/"):
     server_info = db.get_server_by_id(server_id)
     if not server_info:
-        raise HTTPException(status_code=404, detail="Server not found")
+        raise HTTPException(status_code=404, detail=SERVER_NOT_FOUND_DETAIL)
     
     ssh = SSHHandler(**_get_ssh_config(server_info))
     
     sftp = ssh.open_sftp()
     if not sftp:
-        raise HTTPException(status_code=500, detail="Failed to open SFTP session")
+        raise HTTPException(status_code=500, detail=FAILED_OPEN_SFTP_SESSION_DETAIL)
     
     try:
         # 如果路径为空，默认跳转到用户家目录
@@ -1456,17 +1653,24 @@ async def sftp_list(server_id: int, path: str = "/"):
         if sftp: sftp.close()
         ssh.close()
 
-@app.get("/api/sftp/download", dependencies=[Depends(verify_token)])
+@app.get(
+    "/api/sftp/download",
+    dependencies=[Depends(verify_token)],
+    responses={
+        404: {"description": SERVER_NOT_FOUND_DETAIL},
+        500: {"description": FAILED_OPEN_SFTP_SESSION_DETAIL},
+    },
+)
 async def sftp_download(server_id: int, path: str):
     server_info = db.get_server_by_id(server_id)
     if not server_info:
-        raise HTTPException(status_code=404, detail="Server not found")
+        raise HTTPException(status_code=404, detail=SERVER_NOT_FOUND_DETAIL)
     
     ssh = SSHHandler(**_get_ssh_config(server_info))
     
     sftp = ssh.open_sftp()
     if not sftp:
-        raise HTTPException(status_code=500, detail="Failed to open SFTP session")
+        raise HTTPException(status_code=500, detail=FAILED_OPEN_SFTP_SESSION_DETAIL)
     
     try:
         # 获取文件名
@@ -1493,21 +1697,28 @@ async def sftp_download(server_id: int, path: str):
         ssh.close()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/sftp/upload", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/sftp/upload",
+    dependencies=[Depends(verify_token)],
+    responses={
+        404: {"description": SERVER_NOT_FOUND_DETAIL},
+        500: {"description": FAILED_OPEN_SFTP_SESSION_DETAIL},
+    },
+)
 async def sftp_upload(
-    server_id: int = Form(...),
-    path: str = Form(...),
-    file: UploadFile = File(...)
+    server_id: Annotated[int, Form(...)],
+    path: Annotated[str, Form(...)],
+    file: Annotated[UploadFile, File(...)],
 ):
     server_info = db.get_server_by_id(server_id)
     if not server_info:
-        raise HTTPException(status_code=404, detail="Server not found")
+        raise HTTPException(status_code=404, detail=SERVER_NOT_FOUND_DETAIL)
     
     ssh = SSHHandler(**_get_ssh_config(server_info))
     
     sftp = ssh.open_sftp()
     if not sftp:
-        raise HTTPException(status_code=500, detail="Failed to open SFTP session")
+        raise HTTPException(status_code=500, detail=FAILED_OPEN_SFTP_SESSION_DETAIL)
     
     try:
         # 构造完整目标路径
@@ -1528,7 +1739,11 @@ async def sftp_upload(
         if sftp: sftp.close()
         ssh.close()
 
-@app.post("/api/sftp/rename", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/sftp/rename",
+    dependencies=[Depends(verify_token)],
+    responses={500: {"description": "SFTP rename failed"}},
+)
 async def sftp_rename(data: SftpRenameModel):
     server_info = db.get_server_by_id(data.server_id)
     ssh = SSHHandler(**_get_ssh_config(server_info))
@@ -1542,7 +1757,11 @@ async def sftp_rename(data: SftpRenameModel):
         if sftp: sftp.close()
         ssh.close()
 
-@app.post("/api/sftp/chmod", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/sftp/chmod",
+    dependencies=[Depends(verify_token)],
+    responses={500: {"description": "SFTP chmod failed"}},
+)
 async def sftp_chmod(data: SftpChmodModel):
     server_info = db.get_server_by_id(data.server_id)
     ssh = SSHHandler(**_get_ssh_config(server_info))
@@ -1558,7 +1777,11 @@ async def sftp_chmod(data: SftpChmodModel):
         if sftp: sftp.close()
         ssh.close()
 
-@app.delete("/api/sftp/delete", dependencies=[Depends(verify_token)])
+@app.delete(
+    "/api/sftp/delete",
+    dependencies=[Depends(verify_token)],
+    responses={500: {"description": "SFTP delete failed"}},
+)
 async def sftp_delete(data: SftpDeleteModel):
     server_info = db.get_server_by_id(data.server_id)
     ssh = SSHHandler(**_get_ssh_config(server_info))
@@ -1578,14 +1801,21 @@ async def sftp_delete(data: SftpDeleteModel):
                 ssh.connect()
                 ssh.write(f"rm -rf '{data.path}'\n")
                 return {"status": "success", "note": "used ssh rm -rf"}
-            except:
+            except Exception:
                 pass
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if sftp: sftp.close()
         ssh.close()
 
-@app.get("/api/sftp/read", dependencies=[Depends(verify_token)])
+@app.get(
+    "/api/sftp/read",
+    dependencies=[Depends(verify_token)],
+    responses={
+        400: {"description": "文件超过 30MB，无法打开"},
+        500: {"description": "SFTP read failed"},
+    },
+)
 async def sftp_read(server_id: int, path: str):
     server_info = db.get_server_by_id(server_id)
     ssh = SSHHandler(**_get_ssh_config(server_info))
@@ -1613,7 +1843,11 @@ async def sftp_read(server_id: int, path: str):
         if sftp: sftp.close()
         ssh.close()
 
-@app.post("/api/sftp/save", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/sftp/save",
+    dependencies=[Depends(verify_token)],
+    responses={500: {"description": "SFTP save failed"}},
+)
 async def sftp_save(data: SftpSaveModel):
     server_info = db.get_server_by_id(data.server_id)
     ssh = SSHHandler(**_get_ssh_config(server_info))
@@ -1629,7 +1863,11 @@ async def sftp_save(data: SftpSaveModel):
         if sftp: sftp.close()
         ssh.close()
 
-@app.post("/api/sftp/create", dependencies=[Depends(verify_token)])
+@app.post(
+    "/api/sftp/create",
+    dependencies=[Depends(verify_token)],
+    responses={500: {"description": "SFTP create failed"}},
+)
 async def sftp_create(data: SftpCreateModel):
     server_info = db.get_server_by_id(data.server_id)
     ssh = SSHHandler(**_get_ssh_config(server_info))

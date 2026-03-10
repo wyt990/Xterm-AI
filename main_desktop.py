@@ -15,6 +15,8 @@ if os.name == 'nt':
 if __name__ == '__main__':
     multiprocessing.freeze_support()
 
+STARTUP_LOG_FILENAME = "startup.log"
+
 def _log(msg):
     """安全输出：打包后 --noconsole 模式下 stdout 可能不可用，忽略输出错误"""
     try:
@@ -223,7 +225,7 @@ def start_backend(port, logs_dir):
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")
     except Exception as e:
         try:
-            err_file = os.path.join(logs_dir, "startup.log")
+            err_file = os.path.join(logs_dir, STARTUP_LOG_FILENAME)
             with open(err_file, "a", encoding="utf-8") as f:
                 f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 后端启动失败: {e}\n")
                 import traceback
@@ -242,7 +244,7 @@ DB_PATH=../config/xterm.db
 # 加密和安全配置（必须与 .env.example 一致，否则数据库解密/登录会异常）
 ENCRYPTION_KEY=2QjFKrIn5ET3--xr5uc76YyDD_kUCeh8wU9N2OUnE7Q=
 JWT_SECRET=xterm_jwt_secret_change_me_in_prod_12345
-APP_PASSWORD=admin
+# APP_PASSWORD 建议手动设置；未设置时后端将使用内置默认值
 
 # 默认 AI 配置 (兜底，推荐存入数据库)
 AI_API_KEY=sk-xxxxxx
@@ -283,7 +285,7 @@ def init_environment(app_root, bundle_path):
                 shutil.copy2(env_example, env_path)
             else:
                 raise FileNotFoundError(".env.example not in bundle")
-        except (PermissionError, OSError, FileNotFoundError):
+        except OSError:
             # 临时目录权限受限（如 F: 盘）时，直接写入默认内容
             with open(env_path, "w", encoding="utf-8") as f:
                 f.write(_DEFAULT_ENV)
@@ -301,7 +303,7 @@ def init_environment(app_root, bundle_path):
                 shutil.copy2(db_example, db_path)
             else:
                 raise FileNotFoundError("xterm.db.example not in bundle")
-        except (PermissionError, OSError, FileNotFoundError):
+        except OSError:
             # 复制失败时创建空文件，后端 Database 会自动初始化表结构
             open(db_path, "a").close()
 
@@ -311,7 +313,7 @@ def init_environment(app_root, bundle_path):
     # 立即写入启动标记，确认目录可写且便于排查
     def _startup_log(msg):
         try:
-            with open(os.path.join(logs_dir, "startup.log"), "a", encoding="utf-8") as f:
+            with open(os.path.join(logs_dir, STARTUP_LOG_FILENAME), "a", encoding="utf-8") as f:
                 f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
         except Exception:
             pass
@@ -340,7 +342,7 @@ if __name__ == '__main__':
 
     def _startup_log(msg):
         try:
-            with open(os.path.join(logs_dir, "startup.log"), "a", encoding="utf-8") as f:
+            with open(os.path.join(logs_dir, STARTUP_LOG_FILENAME), "a", encoding="utf-8") as f:
                 f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
         except Exception:
             pass

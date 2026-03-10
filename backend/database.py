@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 # 加载 .env 环境变量
 load_dotenv()
+NETWORK_ICON = 'fas fa-network-wired'
 
 class Database:
     def __init__(self, db_path):
@@ -184,10 +185,10 @@ class Database:
                 types = [
                     ('Linux', 'linux', 'fab fa-linux', 3),      # 绑定 Linux 运维专家(ID:3)
                     ('Windows', 'windows', 'fab fa-windows', 4),# 绑定 Windows 运维专家(ID:4)
-                    ('H3C', 'h3c', 'fas fa-network-wired', 5),  # 绑定 网络设备运维(ID:5)
-                    ('华为', 'huawei', 'fas fa-network-wired', 5),
-                    ('锐捷', 'ruijie', 'fas fa-network-wired', 5),
-                    ('思科', 'cisco', 'fas fa-network-wired', 5),
+                    ('H3C', 'h3c', NETWORK_ICON, 5),  # 绑定 网络设备运维(ID:5)
+                    ('华为', 'huawei', NETWORK_ICON, 5),
+                    ('锐捷', 'ruijie', NETWORK_ICON, 5),
+                    ('思科', 'cisco', NETWORK_ICON, 5),
                     ('其它', 'other', 'fas fa-microchip', None)
                 ]
                 cursor.executemany('INSERT INTO device_types (name, value, icon, role_id) VALUES (?, ?, ?, ?)', types)

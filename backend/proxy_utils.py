@@ -26,40 +26,52 @@ def is_local_host(host: str) -> bool:
     """
     if not host or not host.strip():
         return True
-    h = host.strip().lower()
-    # localhost
-    if h in ("localhost", "127.0.0.1", "::1"):
+    normalized = _normalize_host(host)
+    if _is_localhost(normalized):
         return True
-    # 移除端口（如有）
+    ipv4 = _parse_ipv4(normalized)
+    if ipv4:
+        return _is_private_ipv4(*ipv4)
+    return _is_local_ipv6(normalized)
+
+
+def _normalize_host(host: str) -> str:
+    h = host.strip().lower()
     if ":" in h and "]" not in h and not h.startswith("["):
-        h = h.split(":")[0]
-    elif "]" in h:
-        # IPv6 [::1]:443 形式
+        return h.split(":")[0]
+    if "]" in h:
         m = re.match(r"\[([^\]]+)\]", h)
         if m:
-            h = m.group(1)
-    # IPv4 私有/本地
-    m = re.match(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$", h)
-    if m:
-        a, b, c, d = (int(x) for x in m.groups())
-        if any(x > 255 for x in (a, b, c, d)):
-            return False
-        if a == 10:
-            return True
-        if a == 127:
-            return True
-        if a == 192 and b == 168:
-            return True
-        if a == 172 and 16 <= b <= 31:
-            return True
-        if a == 169 and b == 254:
-            return True
-    # IPv6 本地
-    if h in ("::1", "::"):
-        return True
-    if h.startswith("fe80:"):
-        return True
-    return False
+            return m.group(1)
+    return h
+
+
+def _is_localhost(host: str) -> bool:
+    return host in ("localhost", "127.0.0.1", "::1")
+
+
+def _parse_ipv4(host: str):
+    m = re.match(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$", host)
+    if not m:
+        return None
+    values = tuple(int(x) for x in m.groups())
+    if any(x > 255 for x in values):
+        return None
+    return values
+
+
+def _is_private_ipv4(a: int, b: int, *_unused: int) -> bool:
+    return (
+        a == 10
+        or a == 127
+        or (a == 192 and b == 168)
+        or (a == 172 and 16 <= b <= 31)
+        or (a == 169 and b == 254)
+    )
+
+
+def _is_local_ipv6(host: str) -> bool:
+    return host in ("::1", "::") or host.startswith("fe80:")
 
 
 def build_proxy_url(proxy: dict) -> str:

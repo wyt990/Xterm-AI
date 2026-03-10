@@ -24,23 +24,15 @@ class SSHHandler:
         self.transport = None
 
     def connect(self):
-        auth_type = "private_key" if self.private_key else "password"
-        _log("SSH", f"连接开始: {self.host}:{self.port} user={self.username} auth={auth_type} proxy={bool(self.proxy)}")
+        _log("SSH", self._build_connect_log())
         try:
             self.client = paramiko.SSHClient()
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-            sock = None
-            if self.proxy:
-                from proxy_utils import should_skip_proxy
-                skip = should_skip_proxy(self.proxy, self.host)
-                _log("SSH", f"代理检查: skip={skip}")
-                if not skip:
-                    _log("SSH", f"创建代理 socket: {self.proxy.get('type')} {self.proxy.get('host')}:{self.proxy.get('port')}")
-                    sock = self._create_proxy_socket()
-                    if not sock:
-                        _log("SSH", "代理 socket 创建失败")
-                        return False
+            sock = self._resolve_connect_sock()
+            if self.proxy and not sock:
+                _log("SSH", "代理 socket 创建失败")
+                return False
 
             _conn_kw = {"timeout": 10, "allow_agent": False, "look_for_keys": False}
             if sock:
@@ -70,6 +62,21 @@ class SSHHandler:
             _log("SSH", f"连接失败: {self.host}:{self.port} error={type(e).__name__}: {e}")
             _log("SSH", f"异常堆栈:\n{tb}")
             return False
+
+    def _build_connect_log(self) -> str:
+        auth_type = "private_key" if self.private_key else "password"
+        return f"连接开始: {self.host}:{self.port} user={self.username} auth={auth_type} proxy={bool(self.proxy)}"
+
+    def _resolve_connect_sock(self):
+        if not self.proxy:
+            return None
+        from proxy_utils import should_skip_proxy
+        skip = should_skip_proxy(self.proxy, self.host)
+        _log("SSH", f"代理检查: skip={skip}")
+        if skip:
+            return None
+        _log("SSH", f"创建代理 socket: {self.proxy.get('type')} {self.proxy.get('host')}:{self.proxy.get('port')}")
+        return self._create_proxy_socket()
 
     def _connect_keyboard_interactive(self):
         """H3C/华为等设备可能要求 keyboard-interactive，password 失败时尝试"""

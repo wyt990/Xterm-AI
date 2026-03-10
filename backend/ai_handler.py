@@ -48,7 +48,7 @@ class AIHandler:
                     try:
                         err_json = response.json()
                         err_msg = err_json.get('error', {}).get('message', response.text)
-                    except:
+                    except (ValueError, TypeError):
                         err_msg = response.text
                     return False, f"API 错误: {response.status_code} - {err_msg}"
         except Exception as e:
@@ -57,54 +57,66 @@ class AIHandler:
                 error_msg += " (请检查 Base URL 是否正确，或者服务器是否能正常访问该网络地址)"
             return False, f"连接异常: {error_msg}"
 
-    async def get_response_stream(self, messages):
-        # 始终包含系统提示词
-        full_messages = [{"role": "system", "content": self.system_prompt}] + messages
-        
-        headers = {
+    def _build_chat_headers(self):
+        return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
-        
-        data = {
+
+    def _build_stream_payload(self, messages):
+        full_messages = [{"role": "system", "content": self.system_prompt}] + messages
+        return {
             "model": self.model,
             "messages": full_messages,
             "stream": True
         }
-        
+
+    async def _stream_non_200_error(self, response):
+        body = await response.aread()
+        try:
+            err_obj = json.loads(body.decode())
+            err_msg = err_obj.get("error", {}).get("message") or err_obj.get("errors", {}).get("message") or str(err_obj.get("error", body.decode()[:200]))
+        except Exception:
+            err_msg = body.decode(errors="replace")[:300]
+        hint = ""
+        if response.status_code == 401:
+            hint = " 建议到 模型设置 中编辑该端点，重新填写有效的 API Key/Token。"
+        yield f"\n[AI Error: API 返回 {response.status_code}: {err_msg}]{hint}\n"
+
+    async def _stream_success_content(self, response):
+        async for line in response.aiter_lines():
+            if not line.startswith("data: "):
+                continue
+            if line.strip() == "data: [DONE]":
+                break
+            try:
+                json_data = json.loads(line[6:])
+                choices = json_data.get('choices') or []
+                item = choices[0] if choices else {}
+                delta = item.get('delta') or {}
+                content = delta.get('content', '') or ''
+                if content:
+                    yield content
+            except Exception as e:
+                _log(f"JSON 解析失败: {e}, 行: {line[:100]}")
+
+    async def get_response_stream(self, messages):
         proxy_url = self._proxy_url()
         _log(f"base_url={self.base_url!r}, proxy={'是' if proxy_url else '否'}")
         try:
             async with httpx.AsyncClient(timeout=60.0, proxy=proxy_url) as client:
-                async with client.stream("POST", f"{self.base_url}/chat/completions", headers=headers, json=data) as response:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/chat/completions",
+                    headers=self._build_chat_headers(),
+                    json=self._build_stream_payload(messages)
+                ) as response:
                     if response.status_code != 200:
-                        body = await response.aread()
-                        try:
-                            err_obj = json.loads(body.decode())
-                            err_msg = err_obj.get("error", {}).get("message") or err_obj.get("errors", {}).get("message") or str(err_obj.get("error", body.decode()[:200]))
-                        except Exception:
-                            err_msg = body.decode(errors="replace")[:300]
-                        hint = ""
-                        if response.status_code == 401:
-                            hint = " 建议到 模型设置 中编辑该端点，重新填写有效的 API Key/Token。"
-                        yield f"\n[AI Error: API 返回 {response.status_code}: {err_msg}]{hint}\n"
+                        async for err in self._stream_non_200_error(response):
+                            yield err
                         return
-                    async for line in response.aiter_lines():
-                        if line.startswith("data: "):
-                            if line.strip() == "data: [DONE]":
-                                break
-                            try:
-                                json_data = json.loads(line[6:])
-                                choices = json_data.get('choices')
-                                if choices is None:
-                                    choices = []
-                                item = choices[0] if len(choices) > 0 else {}
-                                delta = item.get('delta') or {}
-                                content = delta.get('content', '') or ''
-                                if content:
-                                    yield content
-                            except Exception as e:
-                                _log(f"JSON 解析失败: {e}, 行: {line[:100]}")
+                    async for content in self._stream_success_content(response):
+                        yield content
         except Exception as e:
             error_msg = str(e)
             if "All connection attempts failed" in error_msg or "connection" in error_msg.lower():
