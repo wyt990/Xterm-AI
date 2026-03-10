@@ -28,6 +28,19 @@ async function copyTextToClipboard(text) {
             return true;
         }
     } catch (e) {}
+    // 最后兜底：兼容部分 WebView 环境
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return !!ok;
+    } catch (e) {}
     return false;
 }
 

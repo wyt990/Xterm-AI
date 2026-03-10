@@ -8,6 +8,8 @@ import uvicorn
 import multiprocessing
 import shutil
 import tkinter as tk
+if os.name == 'nt':
+    import ctypes
 
 # 允许 PyInstaller 打包时正确处理多进程
 if __name__ == '__main__':
@@ -21,45 +23,187 @@ def _log(msg):
         pass
 
 
+def _set_clipboard_text_tk(text):
+    """跨平台兜底：使用 tkinter 写入剪贴板"""
+    root = None
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        value = text if isinstance(text, str) else str(text or "")
+        root.clipboard_clear()
+        root.clipboard_append(value)
+        # update 确保剪贴板内容真正提交给系统
+        root.update()
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            if root:
+                root.destroy()
+        except Exception:
+            pass
+
+
+def _get_clipboard_text_tk():
+    """跨平台兜底：使用 tkinter 读取剪贴板"""
+    root = None
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        text = root.clipboard_get()
+        return text if isinstance(text, str) else ""
+    except Exception:
+        return ""
+    finally:
+        try:
+            if root:
+                root.destroy()
+        except Exception:
+            pass
+
+
+if os.name == 'nt':
+    _CF_UNICODETEXT = 13
+    _GMEM_MOVEABLE = 0x0002
+
+    def _set_clipboard_text_windows(text):
+        """Windows 原生 API 写剪贴板，避免 tkinter 在某些场景下失效"""
+        value = text if isinstance(text, str) else str(text or "")
+        data = value + "\x00"
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        # 显式声明签名，避免 64 位下句柄/指针被截断
+        user32.OpenClipboard.argtypes = [ctypes.c_void_p]
+        user32.OpenClipboard.restype = ctypes.c_int
+        user32.CloseClipboard.argtypes = []
+        user32.CloseClipboard.restype = ctypes.c_int
+        user32.EmptyClipboard.argtypes = []
+        user32.EmptyClipboard.restype = ctypes.c_int
+        user32.SetClipboardData.argtypes = [ctypes.c_uint, ctypes.c_void_p]
+        user32.SetClipboardData.restype = ctypes.c_void_p
+        kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
+        kernel32.GlobalAlloc.restype = ctypes.c_void_p
+        kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+        kernel32.GlobalLock.restype = ctypes.c_void_p
+        kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+        kernel32.GlobalUnlock.restype = ctypes.c_int
+        kernel32.GlobalFree.argtypes = [ctypes.c_void_p]
+        kernel32.GlobalFree.restype = ctypes.c_void_p
+
+        opened = False
+        for _ in range(10):
+            if user32.OpenClipboard(None):
+                opened = True
+                break
+            time.sleep(0.01)
+        if not opened:
+            return False
+
+        h_mem = None
+        try:
+            if not user32.EmptyClipboard():
+                return False
+
+            size_bytes = len(data) * ctypes.sizeof(ctypes.c_wchar)
+            h_mem = kernel32.GlobalAlloc(_GMEM_MOVEABLE, size_bytes)
+            if not h_mem:
+                return False
+
+            p_mem = kernel32.GlobalLock(h_mem)
+            if not p_mem:
+                kernel32.GlobalFree(h_mem)
+                return False
+
+            try:
+                buf = ctypes.create_unicode_buffer(data)
+                ctypes.memmove(p_mem, buf, size_bytes)
+            finally:
+                kernel32.GlobalUnlock(h_mem)
+
+            if not user32.SetClipboardData(_CF_UNICODETEXT, h_mem):
+                kernel32.GlobalFree(h_mem)
+                return False
+
+            # SetClipboardData 成功后，内存所有权转移给系统，不能再释放
+            h_mem = None
+            return True
+        finally:
+            if h_mem:
+                try:
+                    kernel32.GlobalFree(h_mem)
+                except Exception:
+                    pass
+            user32.CloseClipboard()
+
+    def _get_clipboard_text_windows():
+        """Windows 原生 API 读剪贴板"""
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        user32.OpenClipboard.argtypes = [ctypes.c_void_p]
+        user32.OpenClipboard.restype = ctypes.c_int
+        user32.CloseClipboard.argtypes = []
+        user32.CloseClipboard.restype = ctypes.c_int
+        user32.GetClipboardData.argtypes = [ctypes.c_uint]
+        user32.GetClipboardData.restype = ctypes.c_void_p
+        kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+        kernel32.GlobalLock.restype = ctypes.c_void_p
+        kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+        kernel32.GlobalUnlock.restype = ctypes.c_int
+
+        opened = False
+        for _ in range(10):
+            if user32.OpenClipboard(None):
+                opened = True
+                break
+            time.sleep(0.01)
+        if not opened:
+            return ""
+
+        try:
+            h_data = user32.GetClipboardData(_CF_UNICODETEXT)
+            if not h_data:
+                return ""
+
+            p_data = kernel32.GlobalLock(h_data)
+            if not p_data:
+                return ""
+
+            try:
+                text = ctypes.wstring_at(p_data)
+                return text if isinstance(text, str) else ""
+            finally:
+                kernel32.GlobalUnlock(h_data)
+        finally:
+            user32.CloseClipboard()
+
+
 class DesktopBridge:
     """前端 JS 可调用的桌面能力桥接"""
 
     def get_clipboard_text(self):
         """读取系统剪贴板文本（用于终端粘贴，避免浏览器权限弹窗）"""
-        root = None
-        try:
-            root = tk.Tk()
-            root.withdraw()
-            text = root.clipboard_get()
-            return text if isinstance(text, str) else ""
-        except Exception:
-            return ""
-        finally:
+        if os.name == 'nt':
             try:
-                if root:
-                    root.destroy()
+                return _get_clipboard_text_windows()
             except Exception:
                 pass
+        return _get_clipboard_text_tk()
 
     def set_clipboard_text(self, text):
         """写入系统剪贴板文本（用于前端复制，避免依赖已弃用 Web API）"""
-        root = None
-        try:
-            root = tk.Tk()
-            root.withdraw()
-            value = text if isinstance(text, str) else str(text or "")
-            root.clipboard_clear()
-            root.clipboard_append(value)
-            root.update()
-            return True
-        except Exception:
-            return False
-        finally:
+        value = text if isinstance(text, str) else str(text or "")
+        if os.name == 'nt':
             try:
-                if root:
-                    root.destroy()
+                if _set_clipboard_text_windows(value):
+                    # 写后读回校验，避免“假成功”
+                    return _get_clipboard_text_windows() == value
             except Exception:
                 pass
+        if _set_clipboard_text_tk(value):
+            return _get_clipboard_text_tk() == value
+        return False
 
 def find_free_port():
     """动态寻找一个空闲端口"""
