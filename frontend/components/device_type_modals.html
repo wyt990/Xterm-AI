@@ -3,7 +3,7 @@
     <div class="modal-content" style="width: 700px;">
         <div class="modal-header">
             <h3>系统类型管理</h3>
-            <span class="close" onclick="closeModal('device-type-mgr-modal')">&times;</span>
+            <button type="button" class="close" onclick="closeModal('device-type-mgr-modal')" aria-label="关闭">&times;</button>
         </div>
         <div class="modal-body">
             <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
@@ -35,24 +35,24 @@
     <div class="modal-content" style="width: 400px; margin-top: 100px;">
         <div class="modal-header">
             <h3 id="device-type-modal-title">编辑系统类型</h3>
-            <span class="close" onclick="closeModal('device-type-edit-modal')">&times;</span>
+            <button type="button" class="close" onclick="closeModal('device-type-edit-modal')" aria-label="关闭">&times;</button>
         </div>
         <form id="device-type-form">
             <input type="hidden" name="id" id="dt-id">
             <div class="form-group">
-                <label>名称</label>
-                <input type="text" name="name" required placeholder="如：Ubuntu 22.04">
+                <label for="dt-name">名称</label>
+                <input id="dt-name" type="text" name="name" required placeholder="如：Ubuntu 22.04">
             </div>
             <div class="form-group">
-                <label>标识符 (value)</label>
-                <input type="text" name="value" required placeholder="如：linux_ubuntu">
+                <label for="dt-value">标识符 (value)</label>
+                <input id="dt-value" type="text" name="value" required placeholder="如：linux_ubuntu">
             </div>
             <div class="form-group">
-                <label>图标 (FontAwesome)</label>
-                <input type="text" name="icon" placeholder="fab fa-linux">
+                <label for="dt-icon">图标 (FontAwesome)</label>
+                <input id="dt-icon" type="text" name="icon" placeholder="fab fa-linux">
             </div>
             <div class="form-group">
-                <label>默认 AI 角色</label>
+                <label for="dt-role-select">默认 AI 角色</label>
                 <select name="role_id" id="dt-role-select">
                     <option value="">不绑定（使用系统激活角色）</option>
                 </select>

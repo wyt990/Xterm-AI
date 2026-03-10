@@ -21,26 +21,17 @@ async function copyTextToClipboard(text) {
             const ok = await globalThis.pywebview.api.set_clipboard_text(text);
             if (ok) return true;
         }
-    } catch (e) {}
+    } catch (e) {
+        console.debug('pywebview 复制失败，尝试浏览器剪贴板:', e);
+    }
     try {
         if (navigator.clipboard && globalThis.isSecureContext) {
             await navigator.clipboard.writeText(text);
             return true;
         }
-    } catch (e) {}
-    // 最后兜底：兼容部分 WebView 环境
-    try {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.setAttribute('readonly', '');
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        document.body.appendChild(ta);
-        ta.select();
-        const ok = document.execCommand('copy');
-        document.body.removeChild(ta);
-        return !!ok;
-    } catch (e) {}
+    } catch (e) {
+        console.debug('浏览器剪贴板复制失败:', e);
+    }
     return false;
 }
 
@@ -51,12 +42,16 @@ async function readTextFromClipboard() {
             const text = await globalThis.pywebview.api.get_clipboard_text();
             if (typeof text === 'string') return text;
         }
-    } catch (e) {}
+    } catch (e) {
+        console.debug('pywebview 读取剪贴板失败，尝试浏览器剪贴板:', e);
+    }
     try {
         if (navigator.clipboard && globalThis.isSecureContext) {
             return await navigator.clipboard.readText();
         }
-    } catch (e) {}
+    } catch (e) {
+        console.debug('浏览器剪贴板读取失败:', e);
+    }
     return '';
 }
 
@@ -267,11 +262,13 @@ export function switchTab(tabId) {
                 if (typeof tab.terminal.refresh === 'function') {
                     tab.terminal.refresh(0, tab.terminal.rows - 1);
                 }
-            } catch (e) { /* xterm 版本兼容保护 */ }
+            } catch (e) {
+                console.debug('切换标签后刷新终端失败:', e);
+            }
         }));
         // 额外兜底：100ms 后再试一次（处理部分浏览器的布局延迟）
         setTimeout(() => {
-            try { tab.fitAddon.fit(); } catch (e) {}
+            try { tab.fitAddon.fit(); } catch (e) { console.debug('fitAddon.fit() 失败:', e); }
         }, 100);
     }
 
@@ -296,7 +293,7 @@ export function closeTab(tabId) {
 
     if (getActiveTabId() === tabId) {
         if (tabs.length > 0) {
-            switchTab(tabs[tabs.length - 1].id);
+            switchTab(tabs.at(-1).id);
         } else {
             store.setState('activeTabId', null);
             document.getElementById('quick-connect-page').classList.add('active');
@@ -327,7 +324,7 @@ function connectTerminal(tab) {
 
     // 稍微延迟连接，确保 DOM 完全渲染
     setTimeout(() => {
-        if (!tab.config || !tab.config.id) {
+        if (!tab.config?.id) {
             console.error("❌ 无法建立连接: 服务器配置中缺少 ID", tab.config);
             term.write('\r\n\x1b[31m连接失败: 未找到服务器 ID，请从服务器列表重新连接\x1b[0m\r\n');
             return;
@@ -402,9 +399,9 @@ export function fitActiveTerminal() {
     const activeId = getActiveTabId();
     if (!activeId) return;
     const tab = getTabs().find(t => t.id === activeId);
-    if (tab && tab.fitAddon) {
+    if (tab?.fitAddon) {
         tab.fitAddon.fit();
-        if (tab.socket && tab.socket.readyState === WebSocket.OPEN) {
+        if (tab.socket?.readyState === WebSocket.OPEN) {
             tab.socket.send(JSON.stringify({ 
                 type: 'resize', 
                 cols: tab.terminal.cols, 
@@ -419,13 +416,13 @@ export function refreshActiveTerminal() {
     const activeId = getActiveTabId();
     if (!activeId) return;
     const tab = getTabs().find(t => t.id === activeId);
-    if (!tab || !tab.fitAddon || !tab.terminal) return;
+    if (tab?.fitAddon == null || tab?.terminal == null) return;
 
     tab.fitAddon.fit();
     // 强制 xterm.js 重绘所有行，解决从 display:none 恢复后的黑屏
     tab.terminal.refresh(0, tab.terminal.rows - 1);
 
-    if (tab.socket && tab.socket.readyState === WebSocket.OPEN) {
+    if (tab.socket?.readyState === WebSocket.OPEN) {
         tab.socket.send(JSON.stringify({ 
             type: 'resize', 
             cols: tab.terminal.cols, 

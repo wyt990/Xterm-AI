@@ -3,29 +3,29 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3 id="server-modal-title">添加服务器</h3>
-            <span class="close" onclick="closeModal('server-modal')">&times;</span>
+            <button type="button" class="close" onclick="closeModal('server-modal')" aria-label="关闭">&times;</button>
         </div>
         <form id="server-form">
             <input type="hidden" name="id" id="server-id">
-            <div class="form-group"><label>名称</label><input type="text" name="name" required></div>
+            <div class="form-group"><label for="server-name">名称</label><input id="server-name" type="text" name="name" required></div>
             <div class="form-row">
-                <div class="form-group"><label>主机</label><input type="text" name="host" required></div>
-                <div class="form-group"><label>端口</label><input type="number" name="port" value="22"></div>
+                <div class="form-group"><label for="server-host">主机</label><input id="server-host" type="text" name="host" required></div>
+                <div class="form-group"><label for="server-port">端口</label><input id="server-port" type="number" name="port" value="22"></div>
             </div>
             <div class="form-row">
-                <div class="form-group"><label>账号</label><input type="text" name="username" value="root"></div>
-                <div class="form-group"><label>密码</label><input type="password" name="password"></div>
+                <div class="form-group"><label for="server-username">账号</label><input id="server-username" type="text" name="username" value="root"></div>
+                <div class="form-group"><label for="server-password">密码</label><input id="server-password" type="password" name="password"></div>
             </div>
             <div class="form-row">
-                <div class="form-group"><label>分组</label><input type="text" name="group_name" placeholder="default"></div>
+                <div class="form-group"><label for="server-group-name">分组</label><input id="server-group-name" type="text" name="group_name" placeholder="default"></div>
                 <div class="form-group">
-                    <label>类型</label>
-                    <select name="device_type_id">
+                    <label for="server-device-type-id">类型</label>
+                    <select id="server-device-type-id" name="device_type_id">
                         <!-- 由 JS 动态从数据库加载 -->
                     </select>
                 </div>
             </div>
-            <div class="form-group"><label>备注</label><textarea name="description" rows="2"></textarea></div>
+            <div class="form-group"><label for="server-description">备注</label><textarea id="server-description" name="description" rows="2"></textarea></div>
             <div class="modal-footer" style="justify-content: space-between;">
                 <button type="button" class="btn btn-secondary" onclick="testSSHFromModal(event)">测试连接</button>
                 <button type="submit" class="btn btn-primary">保存</button>

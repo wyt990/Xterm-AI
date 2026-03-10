@@ -94,7 +94,12 @@
     display: flex;
     align-items: center;
     color: #999;
+    font-family: inherit;
     cursor: pointer;
+    background: transparent;
+    border: none;
+    appearance: none;
+    outline: none;
 }
 
 .add-tab-btn:hover {

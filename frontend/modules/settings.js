@@ -2,7 +2,7 @@
  * 设置、角色、端点与日志管理模块
  */
 import { api } from './api.js';
-import { storage, notify, showModal, closeModal, setBtnLoading } from './utils.js';
+import { notify, showModal, closeModal, setBtnLoading } from './utils.js';
 
 export function initSettingsModule() {
     // 绑定表单提交事件
@@ -32,7 +32,10 @@ export function initSettingsModule() {
             form.device_type_id.value = server.device_type_id || "";
             form.description.value = server.description;
             showModal('server-modal');
-        } catch (err) { notify("获取服务器信息失败", "error"); }
+        } catch (err) {
+            console.error("获取服务器信息失败", err);
+            notify("获取服务器信息失败", "error");
+        }
     };
     globalThis.showAddAIModal = () => {
         document.getElementById('ai-modal-title').innerText = '添加 AI 端点';
@@ -65,7 +68,7 @@ export function initSettingsModule() {
         showModal('command-group-modal');
     };
     globalThis.showAddCommandModal = () => {
-        const groupId = document.querySelector('.commands-sidebar-item.active')?.getAttribute('data-id');
+        const groupId = document.querySelector('.commands-sidebar-item.active')?.dataset.id;
         if (!groupId) return notify("请先选择一个命令分类", "warning");
         document.getElementById('command-modal-title').innerText = '添加快捷命令';
         document.getElementById('command-form').reset();
@@ -129,7 +132,7 @@ export async function loadProxies() {
                 isSkills ? '技能 ✓' : '技能 ✗'
             ].join('  ');
             const ignoreLocal = !!p.ignore_local;
-            const safeName = (p.name || '').replace(/'/g, "\\'");
+            const safeName = JSON.stringify(p.name || '');
             return `
             <div class="role-card" data-proxy-id="${p.id}">
                 <div class="role-card-header">
@@ -142,7 +145,7 @@ export async function loadProxies() {
                 </div>
                 <div class="card-actions">
                     <button class="btn btn-sm btn-secondary" onclick="editProxy(${p.id})">编辑</button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteProxy(${p.id}, '${safeName}')">删除</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteProxy(${p.id}, ${safeName})">删除</button>
                 </div>
             </div>
             `;
@@ -214,6 +217,7 @@ async function translateSkillDescription() {
             notify(res.message || '翻译失败', 'info');
         }
     } catch (err) {
+        console.error('翻译失败:', err);
         notify('翻译服务暂不可用（离线/内网），请手动填写', 'info');
     } finally {
         setBtnLoading(btn, false);
@@ -224,8 +228,8 @@ export async function loadSkills() {
     const filterDevice = document.getElementById('skill-filter-device')?.value || '';
     const filterEnabled = document.getElementById('skill-filter-enabled')?.value || '';
     const params = {};
-    if (filterDevice) params.device_type_id = parseInt(filterDevice);
-    if (filterEnabled !== '') params.enabled = parseInt(filterEnabled);
+    if (filterDevice) params.device_type_id = Number.parseInt(filterDevice, 10);
+    if (filterEnabled !== '') params.enabled = Number.parseInt(filterEnabled, 10);
 
     try {
         const skills = await api.getSkills(params);
@@ -249,6 +253,7 @@ export async function loadSkills() {
                 return t ? t.name : '';
             }).filter(Boolean).join('、') || '未绑定';
             const isRemote = (s.source || 'local') !== 'local';
+            const skillDisplayNameLiteral = JSON.stringify(s.display_name || s.name);
             return `
             <div class="role-card ${s.is_enabled ? 'active' : ''}" data-skill-id="${s.id}">
                 <div class="role-card-header">
@@ -264,7 +269,7 @@ export async function loadSkills() {
                     <button class="btn btn-sm btn-secondary" onclick="editSkill(${s.id})">编辑</button>
                     <button class="btn btn-sm ${s.is_enabled ? 'btn-secondary' : 'btn-primary'}" onclick="toggleSkill(${s.id})">${s.is_enabled ? '禁用' : '启用'}</button>
                     ${isRemote ? `<button class="btn btn-sm btn-secondary" onclick="refreshSkill(${s.id})" title="从源刷新">刷新</button>` : ''}
-                    <button class="btn btn-sm btn-danger" onclick="deleteSkill(${s.id}, '${(s.display_name || s.name).replace(/'/g, "\\'")}')">删除</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSkill(${s.id}, ${skillDisplayNameLiteral})">删除</button>
                 </div>
             </div>
             `;
@@ -386,11 +391,11 @@ async function loadRecommendedSkills(query) {
             const isInstalled = installedNames.has((s.name || '').toLowerCase());
             return `
             <div class="role-card" style="cursor: pointer;${isInstalled ? ' opacity: 0.85;' : ''}"
-                data-skill-source="${(s.source || '').replace(/"/g, '&quot;')}"
-                data-skill-name="${(s.name || '').replace(/"/g, '&quot;')}"
-                data-skill-path="${(s.skill_path ?? '.agent-skills').replace(/"/g, '&quot;')}"
-                data-skill-description="${(s.description || '').replace(/"/g, '&quot;')}"
-                data-skill-desc-zh="${(s.description_zh || '').replace(/"/g, '&quot;')}"
+                data-skill-source="${(s.source || '').replaceAll('"', '&quot;')}"
+                data-skill-name="${(s.name || '').replaceAll('"', '&quot;')}"
+                data-skill-path="${(s.skill_path ?? '.agent-skills').replaceAll('"', '&quot;')}"
+                data-skill-description="${(s.description || '').replaceAll('"', '&quot;')}"
+                data-skill-desc-zh="${(s.description_zh || '').replaceAll('"', '&quot;')}"
                 data-skill-device-values="${(s.device_type_values || []).join(',')}">
                 <div class="role-card-header"><h3>${(s.display_name || s.name)}</h3>${isInstalled ? '<span class="badge" style="background:#28a745; margin-left:6px;">已安装</span>' : ''}</div>
                 <div class="role-card-body">
@@ -422,11 +427,11 @@ async function loadSkillsFromRepo() {
         }
         container.innerHTML = skills.map(s => `
             <div class="role-card"
-                data-skill-source="${(s.source || '').replace(/"/g, '&quot;')}"
-                data-skill-name="${(s.name || '').replace(/"/g, '&quot;')}"
-                data-skill-path="${(s.skill_path ?? '.agent-skills').replace(/"/g, '&quot;')}"
-                data-skill-description="${(s.description || '').replace(/"/g, '&quot;')}"
-                data-skill-desc-zh="${(s.description_zh || '').replace(/"/g, '&quot;')}"
+                data-skill-source="${(s.source || '').replaceAll('"', '&quot;')}"
+                data-skill-name="${(s.name || '').replaceAll('"', '&quot;')}"
+                data-skill-path="${(s.skill_path ?? '.agent-skills').replaceAll('"', '&quot;')}"
+                data-skill-description="${(s.description || '').replaceAll('"', '&quot;')}"
+                data-skill-desc-zh="${(s.description_zh || '').replaceAll('"', '&quot;')}"
                 data-skill-device-values="">
                 <div class="role-card-header"><h3>${s.name}</h3></div>
                 <div class="role-card-body">
@@ -463,7 +468,7 @@ function skillStoreSelectInstall(ev, btn, skillData) {
             };
         }
     }
-    if (!data || !data.name) return;
+    if (!data?.name) return;
     skillStorePendingInstall = {
         source: data.source || data.repo || '',
         skill_name: data.name,
@@ -518,6 +523,7 @@ globalThis.translateStoreSkillDescription = async function() {
             notify(res.message || '翻译失败', 'info');
         }
     } catch (err) {
+        console.error('商店描述翻译失败:', err);
         notify('翻译服务暂不可用（离线/内网），可安装后手动编辑', 'info');
     }
 };
@@ -526,7 +532,7 @@ globalThis.skillStoreDoInstall = async function() {
     if (!skillStorePendingInstall) return;
     const descZhInput = document.getElementById('skill-store-desc-zh');
     const descZh = descZhInput?.value?.trim() || skillStorePendingInstall.description_zh || null;
-    const checked = Array.from(document.querySelectorAll('.skill-store-dt:checked')).map(c => parseInt(c.value));
+    const checked = Array.from(document.querySelectorAll('.skill-store-dt:checked')).map(c => Number.parseInt(c.value, 10));
     const btn = document.getElementById('skill-store-install-btn');
     setBtnLoading(btn, true);
     try {
@@ -575,7 +581,7 @@ export async function testSSHFromModal(e) {
     notify("正在测试 SSH 连接...", "info");
     try {
         const res = await api.testServer(data);
-        if (res && res.success) {
+        if (res?.success) {
             notify("连接测试成功！", "success");
         } else {
             notify(res?.message || "连接失败", "error");
@@ -626,7 +632,10 @@ export async function loadAIEndpoints() {
         };
         globalThis.setActiveAI = async (id) => { await api.setActiveAI(id); loadAIEndpoints(); };
         globalThis.deleteAI = async (id) => { if(confirm('确定删除?')){ await api.deleteAIEndpoint(id); loadAIEndpoints(); }};
-    } catch (err) { notify("加载 AI 端点失败", "error"); }
+    } catch (err) {
+        console.error("加载 AI 端点失败", err);
+        notify("加载 AI 端点失败", "error");
+    }
 }
 
 async function testAIFromModal(e) {
@@ -642,7 +651,7 @@ async function testAIFromModal(e) {
     notify("正在测试 AI 连接...", "info");
     try {
         const res = await api.testAI(data);
-        if (res && res.success) {
+        if (res?.success) {
             notify("AI 连接测试成功！", "success");
         } else {
             notify(res?.message || "连接失败", "error");
@@ -690,7 +699,10 @@ export async function loadRoles() {
         };
         globalThis.setActiveRole = async (id) => { await api.setActiveRole(id); loadRoles(); };
         globalThis.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id); loadRoles(); }};
-    } catch (err) { notify("加载角色失败", "error"); }
+    } catch (err) {
+        console.error("加载角色失败", err);
+        notify("加载角色失败", "error");
+    }
 }
 
 async function loadAISelectOptions(selectedId = null) {
@@ -810,7 +822,7 @@ function initForms() {
             e.preventDefault();
             const submitBtn = e.target.querySelector('button[type="submit"]');
             const id = document.getElementById('role-id').value;
-            const checkedTypes = Array.from(e.target.querySelectorAll('input[name="bound_device_types"]:checked')).map(cb => parseInt(cb.value));
+            const checkedTypes = Array.from(e.target.querySelectorAll('input[name="bound_device_types"]:checked')).map(cb => Number.parseInt(cb.value, 10));
             const data = {
                 name: e.target.name.value,
                 system_prompt: e.target.system_prompt.value,
@@ -910,7 +922,7 @@ function initForms() {
             e.preventDefault();
             const submitBtn = e.target.querySelector('button[type="submit"]');
             const id = document.getElementById('skill-id').value;
-            const checkedTypes = Array.from(e.target.querySelectorAll('input[name="bound_device_types"]:checked')).map(cb => parseInt(cb.value));
+            const checkedTypes = Array.from(e.target.querySelectorAll('input[name="bound_device_types"]:checked')).map(cb => Number.parseInt(cb.value, 10));
             const data = {
                 name: e.target.name.value,
                 display_name: e.target.display_name.value || null,
@@ -945,7 +957,7 @@ function initForms() {
                 name: e.target.name.value.trim(),
                 type: e.target.type.value,
                 host: e.target.host.value.trim(),
-                port: parseInt(e.target.port.value, 10),
+                port: Number.parseInt(e.target.port.value, 10),
                 username: e.target.username.value.trim() || null,
                 password: (pwInput.value && pwInput.value !== '********') ? pwInput.value : null,
                 description: e.target.description.value.trim() || null,
@@ -956,7 +968,7 @@ function initForms() {
                 let proxyId;
                 if (id) {
                     await api.updateProxy(id, data);
-                    proxyId = parseInt(id, 10);
+                    proxyId = Number.parseInt(id, 10);
                 } else {
                     const res = await api.addProxy(data);
                     proxyId = res.id;
@@ -965,10 +977,14 @@ function initForms() {
                 const bindAi = e.target.querySelector('input[name="bind_ai"]').checked;
                 const bindSkills = e.target.querySelector('input[name="bind_skills"]').checked;
                 const curBindings = await api.getProxyBindings();
+                const nextBinding = (enabled, currentBinding) => {
+                    if (enabled) return proxyId;
+                    return currentBinding === proxyId ? null : currentBinding;
+                };
                 const newBindings = {
-                    terminal: bindTerminal ? proxyId : (curBindings.terminal === proxyId ? null : curBindings.terminal),
-                    ai: bindAi ? proxyId : (curBindings.ai === proxyId ? null : curBindings.ai),
-                    skills: bindSkills ? proxyId : (curBindings.skills === proxyId ? null : curBindings.skills)
+                    terminal: nextBinding(bindTerminal, curBindings.terminal),
+                    ai: nextBinding(bindAi, curBindings.ai),
+                    skills: nextBinding(bindSkills, curBindings.skills),
                 };
                 await api.updateProxyBindings(newBindings);
                 closeModal('proxy-modal');

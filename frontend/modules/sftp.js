@@ -27,7 +27,7 @@ export function initSFTPModule() {
     // 暴露全局函数给 index.html
     globalThis.sftpGoBack = () => {
         if (!currentPath || currentPath === '/') return;
-        const parts = currentPath.split('/').filter(p => p);
+        const parts = currentPath.split('/').filter(Boolean);
         parts.pop();
         loadFiles('/' + parts.join('/') || '/');
     };
@@ -167,9 +167,9 @@ function renderFileList(files) {
             clearSelection();
             if (file.is_dir) {
                 loadFiles(currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`);
-            } else {
-                if (globalThis.openFileInEditor) globalThis.openFileInEditor(file);
+                return;
             }
+            if (globalThis.openFileInEditor) globalThis.openFileInEditor(file);
         };
 
         // 右键菜单
@@ -279,12 +279,52 @@ function showContextMenu(e, isFile) {
     contextMenu.style.top = `${y}px`;
 }
 
+function resolveSelectedFilePath() {
+    if (!sftpSelectedFile) return currentPath;
+    return currentPath === '/' ? `/${sftpSelectedFile.name}` : `${currentPath}/${sftpSelectedFile.name}`;
+}
+
+function resolveDeleteTargets() {
+    if (sftpSelectedFiles.size > 0) return [...sftpSelectedFiles.values()];
+    return sftpSelectedFile ? [sftpSelectedFile] : [];
+}
+
+function buildDeleteConfirmMessage(targets) {
+    if (targets.length === 1) {
+        const targetType = targets[0].is_dir ? '目录' : '文件';
+        return `确定要删除 ${targetType} "${targets[0].name}" 吗？`;
+    }
+    return `确定要删除以下 ${targets.length} 个项目吗？\n${targets.map((f) => f.name).join('\n')}`;
+}
+
+async function handleDeleteAction(serverId) {
+    const targets = resolveDeleteTargets();
+    if (targets.length === 0) return;
+    const confirmMsg = buildDeleteConfirmMessage(targets);
+    if (!confirm(confirmMsg)) return;
+    for (const f of targets) {
+        const fp = currentPath === '/' ? `/${f.name}` : `${currentPath}/${f.name}`;
+        await api.sftpDelete({ server_id: serverId, path: fp, is_dir: f.is_dir });
+    }
+    notify(`已删除 ${targets.length} 个项目`, 'success');
+    sftpSelectedFiles.clear();
+    sftpSelectedFile = null;
+    refresh();
+}
+
+function handleCreateAction(type) {
+    const isNewFile = type === 'newfile';
+    document.getElementById('sftp-create-type').value = isNewFile ? 'file' : 'dir';
+    document.getElementById('sftp-create-title').innerText = isNewFile ? '新建文件' : '新建目录';
+    document.getElementById('sftp-create-name').value = '';
+    showModal('sftp-create-modal');
+}
+
 async function sftpAction(type) {
     if (!store.activeTabId) return;
     const tab = globalThis.getTab(store.activeTabId);
     const serverId = tab.config.id;
-    const filePath = sftpSelectedFile ? (currentPath === '/' ? `/${sftpSelectedFile.name}` : `${currentPath}/${sftpSelectedFile.name}`) : currentPath;
-
+    const filePath = resolveSelectedFilePath();
     try {
         switch (type) {
             case 'download':
@@ -302,34 +342,12 @@ async function sftpAction(type) {
                 setChmodCheckboxes(sftpSelectedFile.perms_octal || '0644');
                 showModal('sftp-chmod-modal');
                 break;
-            case 'delete': {
-                const targets = sftpSelectedFiles.size > 0
-                    ? [...sftpSelectedFiles.values()]
-                    : (sftpSelectedFile ? [sftpSelectedFile] : []);
-                if (targets.length === 0) break;
-
-                const confirmMsg = targets.length === 1
-                    ? `确定要删除 ${targets[0].is_dir ? '目录' : '文件'} "${targets[0].name}" 吗？`
-                    : `确定要删除以下 ${targets.length} 个项目吗？\n${targets.map(f => f.name).join('\n')}`;
-
-                if (confirm(confirmMsg)) {
-                    for (const f of targets) {
-                        const fp = currentPath === '/' ? `/${f.name}` : `${currentPath}/${f.name}`;
-                        await api.sftpDelete({ server_id: serverId, path: fp, is_dir: f.is_dir });
-                    }
-                    notify(`已删除 ${targets.length} 个项目`, 'success');
-                    sftpSelectedFiles.clear();
-                    sftpSelectedFile = null;
-                    refresh();
-                }
+            case 'delete':
+                await handleDeleteAction(serverId);
                 break;
-            }
             case 'newfile':
             case 'newdir':
-                document.getElementById('sftp-create-type').value = type === 'newfile' ? 'file' : 'dir';
-                document.getElementById('sftp-create-title').innerText = type === 'newfile' ? '新建文件' : '新建目录';
-                document.getElementById('sftp-create-name').value = '';
-                showModal('sftp-create-modal');
+                handleCreateAction(type);
                 break;
             case 'edit':
                 if (globalThis.openFileInEditor) globalThis.openFileInEditor(sftpSelectedFile);
@@ -384,12 +402,12 @@ async function uploadFiles(files) {
     let successCount = 0;
     let failCount = 0;
 
-    for (let i = 0; i < files.length; i++) {
+    for (const file of files) {
         const formData = new FormData();
         formData.append('server_id', tab.config.id);
         // 后端字段名是 path（非 remote_path），file（非 files，且单次单个）
         formData.append('path', currentPath);
-        formData.append('file', files[i]);
+        formData.append('file', file);
 
         try {
             const response = await fetch('/api/sftp/upload', { method: 'POST', body: formData });
@@ -397,11 +415,11 @@ async function uploadFiles(files) {
                 successCount++;
             } else {
                 const data = await response.json();
-                console.error(`上传 ${files[i].name} 失败:`, data.detail);
+                console.error(`上传 ${file.name} 失败:`, data.detail);
                 failCount++;
             }
         } catch (err) {
-            console.error(`上传 ${files[i].name} 异常:`, err);
+            console.error(`上传 ${file.name} 异常:`, err);
             failCount++;
         }
     }
@@ -415,7 +433,7 @@ async function uploadFiles(files) {
 }
 
 function setChmodCheckboxes(octal) {
-    const mode = parseInt(octal, 8);
+    const mode = Number.parseInt(octal, 8);
     const roles = ['owner', 'group', 'others'];
     const types = ['read', 'write', 'execute'];
     const masks = [4, 2, 1];
@@ -489,7 +507,7 @@ function initSftpForms() {
 
 export function goBack() {
     if (currentPath === '/') return;
-    const parts = currentPath.split('/').filter(p => p);
+    const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
     loadFiles('/' + parts.join('/'));
 }

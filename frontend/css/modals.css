@@ -45,6 +45,17 @@
     font-size: 1.5rem;
     cursor: pointer;
     color: #888;
+    font-family: inherit;
+    background: transparent;
+    border: none;
+    appearance: none;
+    padding: 0;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 
 .modal-header .close:hover {
@@ -69,6 +80,13 @@
 }
 
 .form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #bbb;
+    font-size: 0.9rem;
+}
+
+.form-group .form-group-title {
     display: block;
     margin-bottom: 8px;
     color: #bbb;

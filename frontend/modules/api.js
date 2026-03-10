@@ -37,7 +37,9 @@ async function request(url, options = {}) {
                     body: JSON.stringify({ url }),
                     keepalive: true
                 }).catch(() => {});
-            } catch (e) {}
+            } catch (e) {
+                console.warn('上报鉴权失败来源失败:', e);
+            }
             // Token 失效，跳转到登录或显示登录弹窗
             globalThis.dispatchEvent(new CustomEvent('authError'));
             throw new Error('未登录或登录过期');

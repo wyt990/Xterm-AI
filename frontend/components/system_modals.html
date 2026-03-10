@@ -14,7 +14,7 @@
                     <option value="2000">2000 行</option>
                 </select>
                 <button class="btn btn-sm btn-primary" onclick="loadLogContent()"><i class="fas fa-sync"></i> 刷新</button>
-                <span class="close" onclick="closeModal('logs-modal')" style="margin-left: 10px;">&times;</span>
+                <button type="button" class="close" onclick="closeModal('logs-modal')" style="margin-left: 10px;" aria-label="关闭">&times;</button>
             </div>
         </div>
         <div id="log-content-viewer" style="flex: 1; background: #000; color: #ddd; padding: 15px; font-family: monospace; overflow: auto; white-space: pre-wrap; font-size: 0.85rem; border: 1px solid #333; margin-top: 10px; border-radius: 4px;">

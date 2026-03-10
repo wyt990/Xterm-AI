@@ -403,10 +403,16 @@
     cursor: pointer;
     font-size: 13px;
     color: #ccc;
+    font-family: inherit;
     display: flex;
     align-items: center;
     gap: 9px;
     transition: background 0.1s;
+    background: transparent;
+    border: none;
+    appearance: none;
+    width: 100%;
+    text-align: left;
 }
 .ctx-item:hover { background: #094771; color: #fff; }
 .ctx-item i { width: 14px; text-align: center; }

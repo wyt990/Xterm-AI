@@ -15,7 +15,7 @@ let historyTimer = null;
 export function initStatsModule() {
     globalThis.addEventListener('statsCleared', (e) => {
         const tab = currentTabId ? globalThis.getTab(currentTabId) : null;
-        if (!tab || !tab.config?.id) return;
+        if (!tab?.config?.id) return;
         if (e.detail.clearAll || tab.config.id === e.detail.serverId) loadStatsHistory(tab.config.id);
     });
 
@@ -64,7 +64,7 @@ function stopStatsMonitoring() {
 function startStatsMonitoring(tab) {
     stopStatsMonitoring();
     
-    if (!tab.config || !tab.config.id) return;
+    if (!tab?.config?.id) return;
     currentTabId = tab.id;
     
     // 1. 启动 WebSocket 实时采集
@@ -83,7 +83,9 @@ function startStatsMonitoring(tab) {
                 if (store.activeTabId === tab.id) {
                     updateStatsUI(stats, tab.config.id);
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.debug('解析实时状态数据失败:', e);
+            }
         };
         statsSocket.onclose = () => console.log("指标监控连接已断开");
     }, 500);
@@ -186,13 +188,14 @@ function updateStatsUI(stats, serverId) {
         procList.innerHTML = stats.procs.map(p => {
             const pid = p.pid || '';
             const cmd = p.cmd || '';
+            const escapedCmd = cmd.replaceAll("'", String.raw`\'`);
             return `
                 <tr>
                     <td>${p.mem}</td>
                     <td>${p.cpu}</td>
                     <td title="${cmd}">${cmd}</td>
                     <td>
-                        <button class="btn-kill" onclick="killProcess(${serverId}, ${pid}, '${cmd.replace(/'/g, "\\'")}')" title="结束进程">
+                        <button class="btn-kill" onclick="killProcess(${serverId}, ${pid}, '${escapedCmd}')" title="结束进程">
                             <i class="fas fa-times"></i>
                         </button>
                     </td>

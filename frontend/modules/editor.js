@@ -59,7 +59,7 @@ export function initEditorModule() {
 
     document.getElementById('editor-jump-form').onsubmit = (e) => {
         e.preventDefault();
-        const line = parseInt(document.getElementById('editor-jump-line').value);
+        const line = Number.parseInt(document.getElementById('editor-jump-line').value, 10);
         if (line > 0) { aceEditor.gotoLine(line); closeModal('editor-jump-modal'); }
     };
 
@@ -274,9 +274,19 @@ function renderTreeDOM() {
             row.dataset.type = item.type;
             row.dataset.name = item.name;
 
+            let chevronIcon = '';
+            if (isDir) {
+                const chevronDirection = isExp ? 'down' : 'right';
+                chevronIcon = `<i class="fas fa-chevron-${chevronDirection}"></i>`;
+            }
+            let rowIconClass = `${getFileIconClass(item.name)} icon-file`;
+            if (isDir) {
+                const folderSuffix = isExp ? '-open' : '';
+                rowIconClass = `fas fa-folder${folderSuffix} icon-dir`;
+            }
             row.innerHTML = `
-                <span class="tree-toggle">${isDir ? `<i class="fas fa-chevron-${isExp ? 'down' : 'right'}"></i>` : ''}</span>
-                <i class="${isDir ? `fas fa-folder${isExp ? '-open' : ''} icon-dir` : `${getFileIconClass(item.name)} icon-file`} tree-item-icon"></i>
+                <span class="tree-toggle">${chevronIcon}</span>
+                <i class="${rowIconClass} tree-item-icon"></i>
                 <span class="tree-item-name" title="${item.name}">${item.name}</span>
             `;
 
@@ -331,12 +341,14 @@ async function refreshFiletree() {
     Object.keys(treeCache).forEach(k => { delete treeCache[k]; });
     await loadFiletree(treeRootPath);
     // 重新加载展开目录的子项
-    for (const expPath of [...treeExpanded]) {
+    for (const expPath of treeExpanded) {
         if (expPath !== treeRootPath) {
             try {
                 const r = await api.sftpList(treeServerId, expPath);
                 treeCache[expPath] = r.files || [];
-            } catch (_) {}
+            } catch (err) {
+                console.debug(`预加载目录失败: ${expPath}`, err);
+            }
         }
     }
     renderTreeDOM();
@@ -358,74 +370,86 @@ function showEditorContextMenu(e, node) {
     menu.style.top = `${y}px`;
 }
 
+function _getContextActionMeta() {
+    if (!ctxTarget) return null;
+    const { path, name, type } = ctxTarget;
+    const parentPath = path.lastIndexOf('/') > 0 ? path.substring(0, path.lastIndexOf('/')) : '/';
+    const inDir = type === 'dir' ? path : parentPath;
+    return { path, name, type, parentPath, inDir };
+}
+
+async function _handleContextRename(meta) {
+    const { path, name, parentPath } = meta;
+    const newName = prompt('请输入新名称:', name);
+    if (!newName || newName === name) return;
+    const newPath = parentPath === '/' ? `/${newName}` : `${parentPath}/${newName}`;
+    try {
+        await api.sftpRename({ server_id: treeServerId, old_path: path, new_path: newPath });
+        openTabs.forEach(t => { if (t.path === path) { t.path = newPath; t.name = newName; } });
+        renderTabBar();
+        await _invalidateDir(parentPath);
+        notify('重命名成功', 'success');
+    } catch (err) {
+        notify('重命名失败: ' + err.message, 'error');
+    }
+}
+
+async function _handleContextDelete(meta) {
+    const { path, name, type, parentPath } = meta;
+    if (!confirm(`确定要删除 "${name}" 吗？此操作不可恢复！`)) return;
+    try {
+        await api.sftpDelete({ server_id: treeServerId, path, is_dir: type === 'dir' });
+        for (let i = openTabs.length - 1; i >= 0; i--) {
+            if (openTabs[i].path === path || openTabs[i].path.startsWith(path + '/')) {
+                openTabs[i].modified = false;
+                closeEditorTab(openTabs[i].id);
+            }
+        }
+        await _invalidateDir(parentPath);
+        notify('删除成功', 'success');
+    } catch (err) {
+        notify('删除失败: ' + err.message, 'error');
+    }
+}
+
+async function _handleContextCreate(meta, isDir) {
+    const { inDir } = meta;
+    const inputName = prompt(isDir ? '请输入新目录名:' : '请输入新文件名:');
+    if (!inputName) return;
+    const targetPath = inDir === '/' ? `/${inputName}` : `${inDir}/${inputName}`;
+    try {
+        await api.sftpCreate({ server_id: treeServerId, path: targetPath, is_dir: isDir });
+        await _invalidateDir(inDir);
+        if (isDir) {
+            notify('目录创建成功', 'success');
+        } else {
+            openFileFromTree(targetPath, inputName);
+            notify('文件创建成功', 'success');
+        }
+    } catch (err) {
+        notify((isDir ? '创建目录失败: ' : '创建文件失败: ') + err.message, 'error');
+    }
+}
+
 async function editorContextAction(action) {
     const menu = document.getElementById('editor-context-menu');
     if (menu) menu.style.display = 'none';
-    if (!ctxTarget) return;
-    const { path, name, type } = ctxTarget;
-    const parentPath = path.lastIndexOf('/') > 0 ? path.substring(0, path.lastIndexOf('/')) : '/';
-    const inDir = type === 'dir' ? path : parentPath;  // 新建项目放在哪里
+    const meta = _getContextActionMeta();
+    if (!meta) return;
 
-    switch (action) {
-        case 'open':
-            if (type === 'file') openFileFromTree(path, name);
-            break;
+    const actionHandlers = {
+        open: () => {
+            if (meta.type === 'file') openFileFromTree(meta.path, meta.name);
+        },
+        rename: () => _handleContextRename(meta),
+        delete: () => _handleContextDelete(meta),
+        'new-file': () => _handleContextCreate(meta, false),
+        'new-dir': () => _handleContextCreate(meta, true),
+    };
 
-        case 'rename': {
-            const newName = prompt('请输入新名称:', name);
-            if (!newName || newName === name) return;
-            const newPath = parentPath === '/' ? `/${newName}` : `${parentPath}/${newName}`;
-            try {
-                await api.sftpRename({ server_id: treeServerId, old_path: path, new_path: newPath });
-                openTabs.forEach(t => { if (t.path === path) { t.path = newPath; t.name = newName; } });
-                renderTabBar();
-                await _invalidateDir(parentPath);
-                notify('重命名成功', 'success');
-            } catch (err) { notify('重命名失败: ' + err.message, 'error'); }
-            break;
-        }
-
-        case 'delete': {
-            if (!confirm(`确定要删除 "${name}" 吗？此操作不可恢复！`)) return;
-            try {
-                await api.sftpDelete({ server_id: treeServerId, path, is_dir: type === 'dir' });
-                // 关闭属于该路径的 tab
-                for (let i = openTabs.length - 1; i >= 0; i--) {
-                    if (openTabs[i].path === path || openTabs[i].path.startsWith(path + '/')) {
-                        openTabs[i].modified = false;
-                        closeEditorTab(openTabs[i].id);
-                    }
-                }
-                await _invalidateDir(parentPath);
-                notify('删除成功', 'success');
-            } catch (err) { notify('删除失败: ' + err.message, 'error'); }
-            break;
-        }
-
-        case 'new-file': {
-            const fname = prompt('请输入新文件名:');
-            if (!fname) return;
-            const np = inDir === '/' ? `/${fname}` : `${inDir}/${fname}`;
-            try {
-                await api.sftpCreate({ server_id: treeServerId, path: np, is_dir: false });
-                await _invalidateDir(inDir);
-                openFileFromTree(np, fname);
-                notify('文件创建成功', 'success');
-            } catch (err) { notify('创建文件失败: ' + err.message, 'error'); }
-            break;
-        }
-
-        case 'new-dir': {
-            const dname = prompt('请输入新目录名:');
-            if (!dname) return;
-            const np = inDir === '/' ? `/${dname}` : `${inDir}/${dname}`;
-            try {
-                await api.sftpCreate({ server_id: treeServerId, path: np, is_dir: true });
-                await _invalidateDir(inDir);
-                notify('目录创建成功', 'success');
-            } catch (err) { notify('创建目录失败: ' + err.message, 'error'); }
-            break;
-        }
+    const handler = actionHandlers[action];
+    if (handler) {
+        await handler();
     }
 }
 
@@ -462,7 +486,9 @@ async function _invalidateDir(dirPath) {
         try {
             const r = await api.sftpList(treeServerId, dirPath);
             treeCache[dirPath] = r.files || [];
-        } catch (_) {}
+        } catch (err) {
+            console.debug(`刷新目录缓存失败: ${dirPath}`, err);
+        }
     }
     renderTreeDOM();
 }
@@ -487,7 +513,10 @@ async function saveAllEditorTabs() {
         try {
             await api.sftpSave({ server_id: treeServerId, path: t.path, content: t.session.getValue() });
             t.modified = false; ok++;
-        } catch (err) { notify(`保存 ${t.name} 失败`, 'error'); }
+        } catch (err) {
+            console.error(`保存 ${t.name} 失败:`, err);
+            notify(`保存 ${t.name} 失败`, 'error');
+        }
     }
     renderTabBar();
     if (ok > 0) notify(`已保存 ${ok} 个文件`, 'success');
@@ -558,7 +587,7 @@ function initTreeResizer() {
 // ===================== 设置 =====================
 function changeEditorTheme(theme) { aceEditor.setTheme(`ace/theme/${theme}`); storage.set('editor_theme', theme); }
 function changeEditorFontSize(size) { aceEditor.setFontSize(size); }
-function changeEditorTabSize(size) { aceEditor.session.setTabSize(parseInt(size)); }
+function changeEditorTabSize(size) { aceEditor.session.setTabSize(Number.parseInt(size, 10)); }
 function toggleEditorSettingsMenu() {
     const m = document.getElementById('editor-settings-menu');
     m.style.display = m.style.display === 'none' ? 'block' : 'none';

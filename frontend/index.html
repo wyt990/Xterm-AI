@@ -9,12 +9,12 @@
     <link rel="stylesheet" href="/static/lib/fontawesome/css/all.min.css?v=1.2">
     <!-- 拆分后的模块化样式表 -->
     <link rel="stylesheet" href="/frontend/css/base.css?v=1.3">
-    <link rel="stylesheet" href="/frontend/css/modals.css?v=1.3">
+    <link rel="stylesheet" href="/frontend/css/modals.css?v=1.5">
     <link rel="stylesheet" href="/frontend/css/layout.css?v=1.3">
-    <link rel="stylesheet" href="/frontend/css/terminal.css?v=1.3">
+    <link rel="stylesheet" href="/frontend/css/terminal.css?v=1.5">
     <link rel="stylesheet" href="/frontend/css/ai_chat.css?v=1.3">
-    <link rel="stylesheet" href="/frontend/css/sftp.css?v=1.4">
-    <link rel="stylesheet" href="/frontend/css/editor.css?v=2.0">
+    <link rel="stylesheet" href="/frontend/css/sftp.css?v=1.6">
+    <link rel="stylesheet" href="/frontend/css/editor.css?v=2.2">
     <link rel="stylesheet" href="/frontend/css/responsive.css?v=1.0">
 </head>
 <body>
@@ -64,7 +64,9 @@
                     <div class="terminal-section">
                         <!-- 标签栏 -->
                         <div class="tab-bar" id="tab-bar">
-                            <div class="add-tab-btn" onclick="showQuickConnect()" title="新建标签页"><i class="fas fa-plus"></i></div>
+                            <button type="button" class="add-tab-btn" onclick="showQuickConnect()" title="新建标签页" aria-label="新建标签页">
+                                <i class="fas fa-plus"></i>
+                            </button>
                         </div>
 
                         <!-- 终端容器堆栈 -->
@@ -130,7 +132,9 @@
                                     <div class="commands-sidebar" style="width: 150px; border-right: 1px solid #333; overflow-y: auto;">
                                         <div class="commands-sidebar-header" style="padding: 8px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
                                             <span style="font-size: 12px; color: #888;">分类</span>
-                                            <i class="fas fa-plus-circle" style="cursor: pointer; color: #0078d4;" onclick="showAddCommandGroupModal()"></i>
+                                            <button type="button" style="cursor: pointer; color: #0078d4; background: transparent; border: 0; padding: 0;" onclick="showAddCommandGroupModal()" title="添加分类" aria-label="添加分类">
+                                                <i class="fas fa-plus-circle"></i>
+                                            </button>
                                         </div>
                                         <div id="command-groups-list">
                                             <!-- 分组列表 -->
@@ -333,15 +337,15 @@
                         <h3 style="margin-bottom: 15px; color: #0078d4;">日志设置</h3>
                         <form id="system-settings-form">
                             <div class="form-group">
-                                <label>日志开关</label>
-                                <select name="log_enabled">
+                                <label for="log-enabled">日志开关</label>
+                                <select id="log-enabled" name="log_enabled">
                                     <option value="1">开启</option>
                                     <option value="0">关闭</option>
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label>日志级别</label>
-                                <select name="log_level">
+                                <label for="log-level">日志级别</label>
+                                <select id="log-level" name="log_level">
                                     <option value="DEBUG">DEBUG (详细调试，记录 AI 原始内容)</option>
                                     <option value="INFO">INFO (普通信息)</option>
                                     <option value="WARNING">WARNING (警告)</option>
@@ -349,17 +353,17 @@
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label>日志保存目录</label>
-                                <input type="text" name="log_path" placeholder="../logs">
+                                <label for="log-path">日志保存目录</label>
+                                <input id="log-path" type="text" name="log_path" placeholder="../logs">
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label>单文件最大大小 (MB)</label>
-                                    <input type="number" name="log_max_size" value="10">
+                                    <label for="log-max-size">单文件最大大小 (MB)</label>
+                                    <input id="log-max-size" type="number" name="log_max_size" value="10">
                                 </div>
                                 <div class="form-group">
-                                    <label>保留文件数</label>
-                                    <input type="number" name="log_backup_count" value="10">
+                                    <label for="log-backup-count">保留文件数</label>
+                                    <input id="log-backup-count" type="number" name="log_backup_count" value="10">
                                 </div>
                             </div>
                             <div class="modal-footer" style="padding: 0; border: none; margin-top: 20px; justify-content: flex-start; gap: 10px;">

@@ -65,7 +65,9 @@ function setupLoginForm() {
                 // 登录成功后启动应用
                 await startApp();
             } catch (err) {
+                console.error('登录失败:', err);
                 if (errEl) errEl.style.display = 'block';
+                notify(`登录失败: ${err?.message || '请检查密码'}`, 'error');
             }
         };
     }
@@ -119,7 +121,7 @@ async function loadCommandGroups() {
             item.onclick = () => {
                 document.querySelectorAll('.commands-sidebar-item').forEach(i => i.classList.remove('active'));
                 item.classList.add('active');
-                loadCommands(item.getAttribute('data-id'));
+                loadCommands(item.dataset.id);
             };
         });
         
@@ -138,12 +140,12 @@ async function loadCommands(groupId) {
         const encodeBase64Unicode = (text) => {
             const bytes = new TextEncoder().encode(String(text ?? ''));
             let binary = '';
-            for (const b of bytes) binary += String.fromCharCode(b);
+            for (const b of bytes) binary += String.fromCodePoint(b);
             return btoa(binary);
         };
         const decodeBase64Unicode = (base64Text) => {
             const binary = atob(base64Text);
-            const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+            const bytes = Uint8Array.from(binary, ch => ch.codePointAt(0) ?? 0);
             return new TextDecoder().decode(bytes);
         };
         
@@ -153,7 +155,7 @@ async function loadCommands(groupId) {
                 <div class="command-tile-content">${cmd.content.substring(0, 30)}${cmd.content.length > 30 ? '...' : ''}</div>
                 <div class="command-tile-actions">
                     <span title="编辑" onclick="event.stopPropagation(); editCommand(${cmd.id})"><i class="fas fa-edit"></i></span>
-                    <span title="删除" onclick="event.stopPropagation(); deleteCommand(${cmd.id}, '${cmd.name.replace(/'/g, "\\'")}')"><i class="fas fa-trash-alt"></i></span>
+                    <span title="删除" onclick="event.stopPropagation(); deleteCommand(${cmd.id}, ${JSON.stringify(cmd.name)})"><i class="fas fa-trash-alt"></i></span>
                 </div>
             </div>
         `).join('');
@@ -162,7 +164,7 @@ async function loadCommands(groupId) {
             const content = decodeBase64Unicode(encodedContent);
             const activeId = store.getState('activeTabId');
             const activeTab = globalThis.getTab(activeId);
-            if (!activeTab || !activeTab.socket) return notify("请先选择一个活跃的终端标签", "warning");
+            if (!activeTab?.socket) return notify("请先选择一个活跃的终端标签", "warning");
             activeTab.socket.send(JSON.stringify({ type: 'data', data: content + (autoCr ? '\n' : '') }));
         };
 
@@ -193,70 +195,77 @@ async function loadCommands(groupId) {
 // --- UI 交互模块 ---
 
 function initNavigation() {
+    const showTerminalView = () => {
+        const tabs = store ? store.getState('tabs') : [];
+        if (tabs && tabs.length > 0) {
+            const targetId = (store ? store.getState('activeTabId') : null) || tabs[tabs.length - 1].id;
+            terminal.switchTab(targetId);
+            return;
+        }
+        const welcomePage = document.getElementById('quick-connect-page');
+        if (welcomePage) welcomePage.classList.add('active');
+    };
+
+    const viewHandlers = {
+        'terminal-view': showTerminalView,
+        'roles-view': () => settings.loadRoles(),
+        'skills-view': async () => {
+            await settings.initSkillFilters?.();
+            await settings.loadSkills?.();
+        },
+        'model-settings-view': () => settings.loadAIEndpoints(),
+        'settings-view': () => {
+            loadSystemSettings();
+            settings.loadProxies?.();
+        },
+    };
+
+    const handleViewSwitch = (viewId) => {
+        const handler = viewHandlers[viewId];
+        if (!handler) return;
+        const result = handler();
+        if (result && typeof result.catch === 'function') {
+            result.catch((err) => console.error('视图切换处理失败:', err));
+        }
+    };
+
     document.querySelectorAll('.nav-item').forEach(item => {
         item.onclick = () => {
-            const viewId = item.getAttribute('data-view');
+            const viewId = item.dataset.view;
             document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
             item.classList.add('active');
             
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             const targetView = document.getElementById(viewId);
             if (targetView) targetView.classList.add('active');
-            
-            // 路由特殊处理
-            if (viewId === 'terminal-view') {
-                const tabs = store ? store.getState('tabs') : [];
-                if (tabs && tabs.length > 0) {
-                    // 有连接：switchTab 会重新给终端容器加 active 并触发 fit+refresh
-                    const targetId = (store ? store.getState('activeTabId') : null) || tabs[tabs.length - 1].id;
-                    terminal.switchTab(targetId);
-                } else {
-                    // 无连接：恢复"最近连接"欢迎页（它的 active 也被 querySelectorAll 清掉了）
-                    const welcomePage = document.getElementById('quick-connect-page');
-                    if (welcomePage) welcomePage.classList.add('active');
-                }
-            } else if (viewId === 'roles-view') {
-                settings.loadRoles();
-            } else if (viewId === 'skills-view') {
-                (async () => {
-                    await settings.initSkillFilters?.();
-                    await settings.loadSkills?.();
-                })();
-            } else if (viewId === 'model-settings-view') {
-                settings.loadAIEndpoints();
-            } else if (viewId === 'settings-view') {
-                loadSystemSettings();
-                settings.loadProxies?.();
-            }
+            handleViewSwitch(viewId);
         };
     });
 }
 
-// (Resizer, StatsTabs, BottomPanel 逻辑保持不变...)
+// (拖拽条、StatsTabs、BottomPanel 逻辑保持不变...)
 function initLayoutResizer() {
-    const sidebar = document.getElementById('sidebar');
     const sidebarResizer = document.getElementById('sidebar-resizer');
-    const aiSection = document.getElementById('ai-section');
     const aiResizer = document.getElementById('ai-resizer');
     const bottomPanel = document.getElementById('bottom-panel');
     const bottomResizer = document.getElementById('bottom-panel-resizer');
-    let currentResizer = null;
-    sidebarResizer.onmousedown = (e) => { currentResizer = 'sidebar'; document.body.style.cursor = 'col-resize'; e.preventDefault(); };
-    aiResizer.onmousedown = (e) => { currentResizer = 'ai'; document.body.style.cursor = 'col-resize'; e.preventDefault(); };
-    bottomResizer.onmousedown = (e) => { currentResizer = 'bottom'; document.body.style.cursor = 'row-resize'; e.preventDefault(); };
+    let currentResizeTarget = null;
+    sidebarResizer.onmousedown = (e) => { currentResizeTarget = 'sidebar'; document.body.style.cursor = 'col-resize'; e.preventDefault(); };
+    aiResizer.onmousedown = (e) => { currentResizeTarget = 'ai'; document.body.style.cursor = 'col-resize'; e.preventDefault(); };
+    bottomResizer.onmousedown = (e) => { currentResizeTarget = 'bottom'; document.body.style.cursor = 'row-resize'; e.preventDefault(); };
     globalThis.onmousemove = (e) => {
-        if (!currentResizer) return;
-        if (currentResizer === 'sidebar') {
+        if (!currentResizeTarget) return;
+        if (currentResizeTarget === 'sidebar') {
             const newWidth = e.clientX;
             if (newWidth > 60 && newWidth < 500) {
                 document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
             }
-        } else if (currentResizer === 'ai') {
+        } else if (currentResizeTarget === 'ai') {
             const newWidth = globalThis.innerWidth - e.clientX;
             if (newWidth > 0 && newWidth < 600) {
                 document.documentElement.style.setProperty('--ai-section-width', `${newWidth}px`);
             }
-        } else if (currentResizer === 'bottom') {
+        } else if (currentResizeTarget === 'bottom') {
             const newHeight = globalThis.innerHeight - e.clientY;
             if (newHeight > 30 && newHeight < globalThis.innerHeight * 0.8) bottomPanel.style.height = `${newHeight}px`;
         }
@@ -264,8 +273,8 @@ function initLayoutResizer() {
         requestAnimationFrame(() => terminal.fitActiveTerminal());
     };
     globalThis.onmouseup = () => {
-        if (currentResizer) {
-            currentResizer = null;
+        if (currentResizeTarget) {
+            currentResizeTarget = null;
             document.body.style.cursor = 'default';
             // 鼠标释放后再 fit 一次，确保最终尺寸正确
             requestAnimationFrame(() => terminal.fitActiveTerminal());
@@ -277,7 +286,7 @@ function initStatsTabs() {
     const statsTabs = document.querySelectorAll('.stats-tab');
     statsTabs.forEach(tab => {
         tab.onclick = () => {
-            const target = tab.getAttribute('data-tab');
+            const target = tab.dataset.tab;
             statsTabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             document.querySelectorAll('.stats-tab-content').forEach(c => c.classList.remove('active'));
@@ -309,7 +318,7 @@ function initBottomPanel() {
     const panelTabs = document.querySelectorAll('.panel-tab');
     panelTabs.forEach(tab => {
         tab.onclick = () => {
-            const target = tab.getAttribute('data-panel');
+            const target = tab.dataset.panel;
             panelTabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             document.querySelectorAll('.bottom-panel-content').forEach(c => c.classList.remove('active'));
@@ -371,6 +380,7 @@ async function loadServers() {
         try {
             collapsed = await api.getServerTreeCollapsed() || {};
         } catch (e) {
+            console.warn('读取服务端折叠状态失败，回退本地缓存:', e);
             collapsed = storage.get('server_tree_collapsed', {});
         }
 
@@ -386,7 +396,6 @@ async function loadServers() {
             const path = parentPath ? `${parentPath}/${name}` : name;
             const isCollapsed = !!collapsed[path];
             const total = countTotal(node);
-            const hasChildren = Object.keys(node._children).length > 0 || node._servers.length > 0;
 
             const nodeEl = document.createElement('div');
             nodeEl.className = `tree-node tree-level-${level}${isCollapsed ? ' collapsed' : ''}`;
@@ -417,7 +426,7 @@ async function loadServers() {
             children.className = 'tree-node-children';
 
             // 先渲染子分组（字母排序）
-            Object.keys(node._children).sort().forEach(childName => {
+            Object.keys(node._children).sort((a, b) => a.localeCompare(b, 'zh-CN')).forEach(childName => {
                 children.appendChild(renderNode(childName, node._children[childName], path, level + 1));
             });
 
@@ -438,11 +447,14 @@ async function loadServers() {
         }
 
         // ── 5. 渲染顶层节点（字母排序） ───────────────────────────
-        Object.keys(tree).sort().forEach(name => {
+        Object.keys(tree).sort((a, b) => a.localeCompare(b, 'zh-CN')).forEach(name => {
             container.appendChild(renderNode(name, tree[name], '', 1));
         });
 
-    } catch (err) { notify("加载服务器失败", 'error'); }
+    } catch (err) {
+        console.error("加载服务器失败", err);
+        notify(`加载服务器失败: ${err?.message || '未知错误'}`, 'error');
+    }
 }
 
 function connectToServer(server) {
@@ -511,7 +523,10 @@ async function loadDeviceTypeList() {
                 </td>
             </tr>
         `).join('');
-    } catch (err) { notify('加载列表失败', 'error'); }
+    } catch (err) {
+        console.error('加载系统类型列表失败', err);
+        notify(`加载列表失败: ${err?.message || '未知错误'}`, 'error');
+    }
 }
 
 globalThis.showAddDeviceType = async () => {
@@ -545,7 +560,10 @@ globalThis.deleteDeviceType = async (id, name) => {
         loadDeviceTypeList();
         loadDeviceTypes();
         loadServers(); // 刷新服务器列表显示
-    } catch (err) { notify('删除失败', 'error'); }
+    } catch (err) {
+        console.error('删除系统类型失败', err);
+        notify(`删除失败: ${err?.message || '未知错误'}`, 'error');
+    }
 };
 
 // 绑定系统类型表单提交
@@ -654,7 +672,7 @@ async function loadConnectionHistory() {
         const iconCls  = getDeviceIconClass(dtype);
         const iconName = getDeviceIcon(dtype);
         const groupHtml = item.group_name && item.group_name !== 'default'
-            ? `<div class="history-card-group"><i class="fas fa-folder"></i>${item.group_name.replace(/\//g, ' › ')}</div>`
+            ? `<div class="history-card-group"><i class="fas fa-folder"></i>${item.group_name.replaceAll('/', ' › ')}</div>`
             : '';
         const connectedAt = item.last_connected_at ? new Date(item.last_connected_at) : null;
         card.innerHTML = `

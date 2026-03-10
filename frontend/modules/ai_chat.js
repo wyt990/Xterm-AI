@@ -69,26 +69,17 @@ async function copyTextToClipboard(text) {
             const ok = await globalThis.pywebview.api.set_clipboard_text(text);
             if (ok) return true;
         }
-    } catch (e) {}
+    } catch (e) {
+        console.debug('pywebview 复制失败，尝试浏览器剪贴板:', e);
+    }
     try {
         if (navigator.clipboard && globalThis.isSecureContext) {
             await navigator.clipboard.writeText(text);
             return true;
         }
-    } catch (e) {}
-    // 最后兜底：兼容部分 WebView 环境
-    try {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.setAttribute('readonly', '');
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        document.body.appendChild(ta);
-        ta.select();
-        const ok = document.execCommand('copy');
-        document.body.removeChild(ta);
-        return !!ok;
-    } catch (e) {}
+    } catch (e) {
+        console.debug('浏览器剪贴板复制失败:', e);
+    }
     return false;
 }
 
@@ -212,7 +203,7 @@ async function loadRoles() {
 // 获取当前激活 tab 的角色 ID
 function getCurrentRoleId() {
     const tab = store.activeTabId ? globalThis.getTab(store.activeTabId) : null;
-    if (tab && tab.roleId) return tab.roleId;
+    if (tab?.roleId) return tab.roleId;
     return defaultRoleId;
 }
 
@@ -270,14 +261,14 @@ export function initAIModule() {
         if (!roleIdToSelect && globalThis.allDeviceTypes) {
             // 如果没手动选过，根据服务器 device_type 寻找绑定的角色
             const dtype = globalThis.allDeviceTypes.find(t => t.value === (tab.config.device_type_value || tab.config.device_type));
-            if (dtype && dtype.role_id) {
+            if (dtype?.role_id) {
                 roleIdToSelect = dtype.role_id;
                 console.log(`🎯 检测到设备类型 ${tab.config.device_type_value || tab.config.device_type}，自动匹配 AI 角色 ID: ${roleIdToSelect}`);
             }
         }
 
         // 同步角色选择器：匹配不到绑定关系时使用默认激活角色
-        roleSelect.value = roleIdToSelect || defaultRoleId || (allRoles[0] && allRoles[0].id) || '';
+        roleSelect.value = roleIdToSelect || defaultRoleId || allRoles[0]?.id || '';
         
         // 如果是自动匹配出的角色，且当前 tab 还没记录过，同步给 tab 以保持会话一致性
         if (!tab.roleId && roleIdToSelect) {
@@ -469,7 +460,7 @@ function fillDocTemplate(template, config) {
     };
     let out = template;
     for (const [k, v] of Object.entries(placeholders)) {
-        out = out.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), String(v));
+        out = out.replaceAll(`{{${k}}}`, String(v));
     }
     return out;
 }
@@ -502,7 +493,7 @@ async function showServerDocModal() {
         const doc = await api.getServerDoc(serverId);
         if (doc?.content != null) contentEl.value = doc.content;
     } catch (e) {
-        if (e?.message?.includes('404') || (e?.message && e.message.toLowerCase().includes('not found'))) {
+        if (e?.message?.includes('404') || e?.message?.toLowerCase().includes('not found')) {
             const deviceType = tab.config?.device_type_value || tab.config?.device_type;
             const template = getDocTemplateForDeviceType(deviceType);
             contentEl.value = fillDocTemplate(template, tab.config);
@@ -625,15 +616,23 @@ function startAIStream(prompt, tab) {
 
 // 清洗终端原始输出：去除 ANSI/VT100 转义序列、控制字符，统一换行符
 function cleanTerminalOutput(raw) {
-    return raw
-        .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')          // CSI 序列（颜色、光标移动等）
-        .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '') // OSC 序列（标题设置等）
-        .replace(/\x1b[()][A-Z0-9]/g, '')                 // 字符集切换序列
-        .replace(/\x1b[A-Za-z]/g, '')                     // 其他单字节 ESC 序列
-        .replace(/[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]/g, '') // 退格、Bell、NUL 等控制字符
-        .replace(/\r\n/g, '\n')                            // Windows CRLF → LF
-        .replace(/\r/g, '\n')                              // 单独 CR → LF
-        .replace(/\n{3,}/g, '\n\n')                        // 压缩连续空行
+    const esc = String.fromCodePoint(27);
+    const ansiPatterns = [
+        new RegExp(String.raw`${esc}\[[0-9;?]*[A-Za-z]`, 'g'), // CSI 序列（颜色、光标移动等）
+        new RegExp(String.raw`${esc}\][^${esc}]*(?:${esc}\\|\u0007)`, 'g'), // OSC 序列（标题设置等）
+        new RegExp(String.raw`${esc}[()][A-Z0-9]`, 'g'), // 字符集切换序列
+        new RegExp(String.raw`${esc}[A-Za-z]`, 'g') // 其他单字节 ESC 序列
+    ];
+    let cleaned = raw;
+    for (const pattern of ansiPatterns) {
+        cleaned = cleaned.replace(pattern, '');
+    }
+    const controlChars = /[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F]/g;
+    return cleaned
+        .replaceAll(controlChars, '') // 退格、Bell、NUL 等控制字符
+        .replaceAll('\r\n', '\n') // Windows CRLF → LF
+        .replaceAll('\r', '\n') // 单独 CR → LF
+        .replaceAll(/\n{3,}/g, '\n\n') // 压缩连续空行
         .trim();
 }
 
@@ -659,7 +658,7 @@ function sendCaptureToAI(tabId, output) {
     if (!terminalViewActive) return;
 
     // 仅当用户正在查看「AI 对话」面板时才自动发送，避免切到「系统信息」时误触发
-    const aiChatActive = document.querySelector('.stats-tab.active')?.getAttribute('data-tab') === 'ai-chat';
+    const aiChatActive = document.querySelector('.stats-tab.active')?.dataset.tab === 'ai-chat';
     if (!aiChatActive) return;
 
     const cleanOutput = cleanTerminalOutput(output);
@@ -739,6 +738,142 @@ export function appendMessage(role, content, tab) {
 
 // --- 核心：JSON 指令解析渲染（正则 + 字符串感知大括号计数）---
 // options.replayOnly: true=历史重放（tab切换等），仅渲染不执行命令、不重复更新文档
+function renderMarkdownContent(text) {
+    if (typeof marked === 'undefined') return text;
+    return marked.parse(text);
+}
+
+function appendTextSegment(msgDiv, text) {
+    const normalizedText = normalizeNewlines(text);
+    if (!normalizedText.trim()) return;
+    const textNode = document.createElement('div');
+    textNode.className = 'message-text-content';
+    textNode.innerHTML = renderMarkdownContent(normalizedText);
+    msgDiv.appendChild(textNode);
+}
+
+function updateJsonScanState(ch, scanState) {
+    if (scanState.escaped) {
+        scanState.escaped = false;
+        return;
+    }
+    if (ch === '\\') {
+        scanState.escaped = true;
+        return;
+    }
+    if (ch === '"') {
+        scanState.inString = !scanState.inString;
+    }
+}
+
+function findJsonEndPos(text, startPos) {
+    const scanState = { braceCount: 0, inString: false, escaped: false };
+    for (let i = startPos; i < text.length; i++) {
+        const ch = text[i];
+        updateJsonScanState(ch, scanState);
+        if (scanState.escaped || scanState.inString) continue;
+        if (ch === '{') scanState.braceCount++;
+        if (ch === '}') {
+            scanState.braceCount--;
+            if (scanState.braceCount === 0) return i + 1;
+        }
+    }
+    return -1;
+}
+
+function resolveFullJsonEndPos(text, endPos) {
+    if (!text.substring(endPos).trimStart().startsWith('```')) return endPos;
+    const blockEnd = text.indexOf('```', endPos);
+    if (blockEnd === -1) return endPos;
+    return blockEnd + 3;
+}
+
+function handleCommandRequest(data, msgDiv, tab, replayOnly, state) {
+    if (state.commandFound) return;
+    state.commandFound = true; // 每一轮回复只处理第一个指令
+    const command = (data.command || '').trim();
+    const mode = document.getElementById('ai-mode-select').value;
+    const deviceType = tab?.config?.device_type_value || tab?.config?.device_type || '';
+    if (replayOnly) {
+        renderCommandCard(command, msgDiv, tab, { executed: true });
+        return;
+    }
+    if (mode === 'agent' && isSafeCommand(command, deviceType) && autoExecuteCount < MAX_AUTO_EXECUTE) {
+        autoExecuteCount++;
+        renderAutoExecuteCard(command, data.intent, msgDiv, tab);
+        executeAICommand(command, tab);
+        return;
+    }
+    renderCommandCard(command, msgDiv, tab);
+}
+
+function handleSummaryReport(data, msgDiv, replayOnly) {
+    renderSummaryReport(data.content || '', msgDiv, replayOnly);
+    if (!replayOnly) autoExecuteCount = 0; // 任务达成，重置计数
+}
+
+function handleDocumentUpdate(data, msgDiv, tab, replayOnly) {
+    if (data.content == null) return;
+    const card = renderDocumentUpdateCard(msgDiv, replayOnly ? true : 'pending');
+    if (replayOnly) return;
+    const serverId = tab?.config?.id;
+    if (!serverId || !api) {
+        notify('无法更新文档：未关联服务器', 'warning');
+        updateDocumentUpdateCard(card, false);
+        return;
+    }
+    api.updateServerDoc(serverId, String(data.content))
+        .then(() => {
+            notify('服务器环境文档已更新', 'success');
+            updateDocumentUpdateCard(card, true);
+        })
+        .catch((err) => {
+            notify('文档更新失败: ' + (err?.message || '未知错误'), 'error');
+            updateDocumentUpdateCard(card, false);
+        });
+}
+
+function handleInstructionData(data, msgDiv, tab, replayOnly, state) {
+    if (data.type === 'command_request') {
+        handleCommandRequest(data, msgDiv, tab, replayOnly, state);
+        return;
+    }
+    if (data.type === 'summary_report') {
+        handleSummaryReport(data, msgDiv, replayOnly);
+        return;
+    }
+    if (data.type === 'document_update') {
+        handleDocumentUpdate(data, msgDiv, tab, replayOnly);
+    }
+}
+
+function parseAndHandleInstruction(params) {
+    const { jsonStr, rawText, start, end, msgDiv, tab, replayOnly, state } = params;
+    try {
+        const data = JSON.parse(jsonStr);
+        handleInstructionData(data, msgDiv, tab, replayOnly, state);
+    } catch (e) {
+        console.debug('AI 指令 JSON 解析失败，降级为文本渲染:', e);
+        const errNode = document.createElement('div');
+        errNode.className = 'message-text-content';
+        errNode.innerText = rawText.substring(start, end);
+        msgDiv.appendChild(errNode);
+    }
+}
+
+function tryParseCodeBlockFallback(text, matchIndex, msgDiv, tab, replayOnly, state) {
+    const codeBlockMatch = text.substring(matchIndex).match(/^```(?:json)?\s*([\s\S]*?)```/);
+    if (!codeBlockMatch) return null;
+    const jsonStr = codeBlockMatch[1].trim();
+    try {
+        const data = JSON.parse(jsonStr);
+        handleInstructionData(data, msgDiv, tab, replayOnly, state);
+    } catch (e) {
+        console.debug('AI 代码块 JSON 解析失败，忽略此块:', e);
+    }
+    return matchIndex + codeBlockMatch[0].length;
+}
+
 function processAIResponseForCommands(text, msgDiv, tab, options = {}) {
     const replayOnly = !!options.replayOnly;
     const t = (typeof text === 'string' ? text : '').trim();
@@ -746,148 +881,45 @@ function processAIResponseForCommands(text, msgDiv, tab, options = {}) {
     try {
         msgDiv.classList.add('rendered');
         msgDiv.innerHTML = '';
-
-        let lastIndex = 0;
+        const state = { lastIndex: 0, commandFound: false };
         // 匹配 command_request、summary_report 或 document_update
         const startRegex = /(?:```(?:json)?\s*)?\{[\s\S]*?"type"\s*:\s*"(command_request|summary_report|document_update)"/g;
         let match;
-        let commandFound = false;
 
         while ((match = startRegex.exec(t)) !== null) {
-            // 1. 渲染 JSON 之前的文本
-            const plainText = normalizeNewlines(t.substring(lastIndex, match.index));
-            if (plainText.trim()) {
-                const textNode = document.createElement('div');
-                textNode.className = 'message-text-content';
-                textNode.innerHTML = typeof marked !== 'undefined' ? marked.parse(plainText) : plainText;
-                msgDiv.appendChild(textNode);
-            }
+            appendTextSegment(msgDiv, t.substring(state.lastIndex, match.index));
 
             // 2. 找到 JSON 结束位置
             const startPos = t.indexOf('{', match.index);
-            let braceCount = 0, inString = false, escaped = false, endPos = -1;
-            for (let i = startPos; i < t.length; i++) {
-                const char = t[i];
-                if (escaped) { escaped = false; continue; }
-                if (char === '\\') { escaped = true; continue; }
-                if (char === '"') { inString = !inString; continue; }
-                if (!inString) {
-                    if (char === '{') braceCount++;
-                    if (char === '}') { braceCount--; if (braceCount === 0) { endPos = i + 1; break; } }
+            const endPos = findJsonEndPos(t, startPos);
+            if (endPos === -1) {
+                const codeBlockEnd = tryParseCodeBlockFallback(t, match.index, msgDiv, tab, replayOnly, state);
+                if (codeBlockEnd == null) {
+                    state.lastIndex = match.index + 1;
+                    continue;
                 }
+                state.lastIndex = codeBlockEnd;
+                startRegex.lastIndex = codeBlockEnd;
+                continue;
             }
-
-            if (endPos !== -1) {
-                const jsonStr = t.substring(startPos, endPos);
-                let fullEndPos = endPos;
-                if (t.substring(endPos).trimStart().startsWith('```')) {
-                    fullEndPos = t.indexOf('```', endPos) + 3;
-                }
-
-                try {
-                    const data = JSON.parse(jsonStr);
-                    if (data.type === 'command_request' && !commandFound) {
-                        commandFound = true; // 每一轮回复只处理第一个指令
-                        const command = data.command.trim();
-                        const mode = document.getElementById('ai-mode-select').value;
-                        const deviceType = tab?.config?.device_type_value || tab?.config?.device_type || '';
-
-                        // 历史重放时仅渲染卡片，不执行命令（避免 tab 切换触发重复执行）
-                        if (replayOnly) {
-                            renderCommandCard(command, msgDiv, tab, { executed: true });
-                        } else if (mode === 'agent' && isSafeCommand(command, deviceType) && autoExecuteCount < MAX_AUTO_EXECUTE) {
-                            autoExecuteCount++;
-                            renderAutoExecuteCard(command, data.intent, msgDiv, tab);
-                            executeAICommand(command, tab);
-                        } else {
-                            renderCommandCard(command, msgDiv, tab);
-                        }
-                    } else if (data.type === 'summary_report') {
-                        renderSummaryReport(data.content, msgDiv, replayOnly);
-                        if (!replayOnly) autoExecuteCount = 0; // 任务达成，重置计数
-                    } else if (data.type === 'document_update' && data.content != null) {
-                        const card = renderDocumentUpdateCard(msgDiv, replayOnly ? true : 'pending');
-                        if (!replayOnly) {
-                            const serverId = tab?.config?.id;
-                            if (serverId && api) {
-                                api.updateServerDoc(serverId, String(data.content))
-                                    .then(() => {
-                                        notify('服务器环境文档已更新', 'success');
-                                        updateDocumentUpdateCard(card, true);
-                                    })
-                                    .catch(err => {
-                                        notify('文档更新失败: ' + (err?.message || '未知错误'), 'error');
-                                        updateDocumentUpdateCard(card, false);
-                                    });
-                            } else {
-                                notify('无法更新文档：未关联服务器', 'warning');
-                                updateDocumentUpdateCard(card, false);
-                            }
-                        }
-                    }
-                } catch (e) {
-                    // 解析失败，降级显示
-                    const errNode = document.createElement('div');
-                    errNode.className = 'message-text-content';
-                    errNode.innerText = t.substring(match.index, fullEndPos);
-                    msgDiv.appendChild(errNode);
-                }
-
-                lastIndex = fullEndPos;
-                startRegex.lastIndex = fullEndPos;
-            } else {
-                // 大括号计数失败时，尝试用 ```json ... ``` 块提取
-                const codeBlockMatch = t.substring(match.index).match(/^```(?:json)?\s*([\s\S]*?)```/);
-                if (codeBlockMatch) {
-                    const jsonStr = codeBlockMatch[1].trim();
-                    try {
-                        const data = JSON.parse(jsonStr);
-                        if (data.type === 'command_request' && !commandFound) {
-                            commandFound = true;
-                            const command = (data.command || '').trim();
-                            const mode = document.getElementById('ai-mode-select').value;
-                            const deviceType = tab?.config?.device_type_value || tab?.config?.device_type || '';
-                            if (replayOnly) {
-                                renderCommandCard(command, msgDiv, tab, { executed: true });
-                            } else if (mode === 'agent' && isSafeCommand(command, deviceType) && autoExecuteCount < MAX_AUTO_EXECUTE) {
-                                autoExecuteCount++;
-                                renderAutoExecuteCard(command, data.intent, msgDiv, tab);
-                                executeAICommand(command, tab);
-                            } else {
-                                renderCommandCard(command, msgDiv, tab);
-                            }
-                        } else if (data.type === 'summary_report') {
-                            renderSummaryReport(data.content || '', msgDiv, replayOnly);
-                            if (!replayOnly) autoExecuteCount = 0;
-                        } else if (data.type === 'document_update' && data.content != null) {
-                            const card = renderDocumentUpdateCard(msgDiv, replayOnly ? true : 'pending');
-                            if (!replayOnly && tab?.config?.id && api) {
-                                api.updateServerDoc(tab.config.id, String(data.content))
-                                    .then(() => { notify('服务器环境文档已更新', 'success'); updateDocumentUpdateCard(card, true); })
-                                    .catch(err => { notify('文档更新失败: ' + (err?.message || '未知错误'), 'error'); updateDocumentUpdateCard(card, false); });
-                            } else if (!replayOnly) {
-                                notify('无法更新文档：未关联服务器', 'warning');
-                                updateDocumentUpdateCard(card, false);
-                            }
-                        }
-                    } catch (_) { /* 忽略解析错误 */ }
-                    const fullEnd = match.index + codeBlockMatch[0].length;
-                    lastIndex = fullEnd;
-                    startRegex.lastIndex = fullEnd;
-                } else {
-                    lastIndex = match.index + 1;
-                }
-            }
+            const fullEndPos = resolveFullJsonEndPos(t, endPos);
+            const jsonStr = t.substring(startPos, endPos);
+            parseAndHandleInstruction({
+                jsonStr,
+                rawText: t,
+                start: match.index,
+                end: fullEndPos,
+                msgDiv,
+                tab,
+                replayOnly,
+                state
+            });
+            state.lastIndex = fullEndPos;
+            startRegex.lastIndex = fullEndPos;
         }
 
         // 3. 渲染剩余文本
-        const remainingText = normalizeNewlines(t.substring(lastIndex));
-        if (remainingText.trim()) {
-            const textNode = document.createElement('div');
-            textNode.className = 'message-text-content';
-            textNode.innerHTML = typeof marked !== 'undefined' ? marked.parse(remainingText) : remainingText;
-            msgDiv.appendChild(textNode);
-        }
+        appendTextSegment(msgDiv, t.substring(state.lastIndex));
     } catch (e) {
         console.error('处理 AI 响应失败:', e);
         msgDiv.innerText = t;
@@ -916,14 +948,25 @@ function renderDocumentUpdateCard(container, status) {
     const card = document.createElement('div');
     card.className = 'document-update-card';
     const isPending = status === 'pending';
-    const color = isPending ? '#0078d4' : (status ? '#4caf50' : '#f44336');
+    let color = '#f44336';
+    let title = '文档更新未完成';
+    let detail = '可能因未关联服务器或网络问题导致更新失败。';
+    if (isPending) {
+        color = '#0078d4';
+        title = '正在更新服务器环境文档...';
+        detail = '正在保存到数据库...';
+    } else if (status) {
+        color = '#4caf50';
+        title = '服务器环境文档已更新';
+        detail = '文档已保存，可通过侧边栏文档按钮查看或编辑。';
+    }
     card.style.cssText = 'margin-top:10px;border-radius:6px;overflow:hidden;border:1px solid ' + color;
     card.innerHTML = `
         <div style="background:${color};color:white;padding:6px 12px;font-weight:bold;font-size:13px;">
-            <i class="fas fa-file-alt"></i> ${isPending ? '正在更新服务器环境文档...' : (status ? '服务器环境文档已更新' : '文档更新未完成')}
+            <i class="fas fa-file-alt"></i> ${title}
         </div>
         <div style="padding:8px 12px;background:rgba(0,0,0,0.1);font-size:12px;color:#ccc;">
-            ${isPending ? '正在保存到数据库...' : (status ? '文档已保存，可通过侧边栏文档按钮查看或编辑。' : '可能因未关联服务器或网络问题导致更新失败。')}
+            ${detail}
         </div>
     `;
     container.appendChild(card);
@@ -947,7 +990,7 @@ function updateDocumentUpdateCard(card, success) {
 // 规范化内容中的换行符：处理 API 可能返回的字面 \n（双转义）为真实换行
 function normalizeNewlines(text) {
     if (typeof text !== 'string') return text;
-    return text.replace(/\\n/g, '\n').replace(/\\r/g, '\r');
+    return text.replaceAll(String.raw`\n`, '\n').replaceAll(String.raw`\r`, '\r');
 }
 
 // 渲染总结报告
@@ -965,7 +1008,7 @@ function renderSummaryReport(content, container, replayOnly = false) {
             <i class="fas fa-clipboard-check"></i> 任务阶段性总结
         </div>
         <div class="report-body message-text-content" style="padding:12px; background: rgba(76,175,80,0.05)">
-            ${typeof marked !== 'undefined' ? marked.parse(normalized) : normalized}
+            ${renderMarkdownContent(normalized)}
         </div>
     `;
     container.appendChild(report);
@@ -1031,7 +1074,7 @@ function renderCommandCard(command, container, tab, options = {}) {
 
 // 执行命令：发送到终端并启动输出捕获
 function executeAICommand(command, tab) {
-    if (!tab || !tab.socket || tab.socket.readyState !== WebSocket.OPEN) {
+    if (tab?.socket?.readyState !== WebSocket.OPEN) {
         notify('SSH 未就绪，无法执行命令', 'error');
         return;
     }

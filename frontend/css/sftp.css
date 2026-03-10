@@ -4,6 +4,7 @@
     display: flex;
     flex-direction: column;
     background-color: #1e1e1e;
+    position: relative;
 }
 
 .sftp-toolbar {
@@ -238,11 +239,6 @@
     letter-spacing: 0.5px;
 }
 
-/* sftp-container 需要 position: relative 供 ::after 定位 */
-.sftp-container {
-    position: relative;
-}
-
 /* 右键菜单 */
 .context-menu {
     position: fixed;
@@ -260,10 +256,16 @@
     padding: 8px 15px;
     font-size: 13px;
     color: #ccc;
+    font-family: inherit;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 10px;
+    background: transparent;
+    border: none;
+    appearance: none;
+    width: 100%;
+    text-align: left;
 }
 
 .context-menu-item:hover {
@@ -275,7 +277,8 @@
     background-color: #a80000;
 }
 
-.context-menu-divider {
+.context-menu-divider,
+.context-menu-separator {
     height: 1px;
     background-color: #444;
     margin: 5px 0;

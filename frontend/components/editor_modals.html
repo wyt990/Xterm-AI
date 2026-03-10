@@ -15,7 +15,7 @@
                 <button class="edt-btn" onclick="showJumpLine()"><i class="fas fa-long-arrow-alt-right"></i> 跳转行</button>
             </div>
             <div class="toolbar-right">
-                <label class="edt-label">字体大小</label>
+                <label class="edt-label" for="editor-font-size">字体大小</label>
                 <select id="editor-font-size" onchange="changeEditorFontSize(this.value)" class="edt-select">
                     <option value="12px">12px</option>
                     <option value="14px" selected>14px</option>
@@ -23,7 +23,7 @@
                     <option value="18px">18px</option>
                     <option value="20px">20px</option>
                 </select>
-                <label class="edt-label">主题</label>
+                <label class="edt-label" for="editor-theme-select">主题</label>
                 <select id="editor-theme-select" onchange="changeEditorTheme(this.value)" class="edt-select">
                     <option value="monokai">Monokai</option>
                     <option value="chrome">Chrome</option>
@@ -109,13 +109,13 @@
 
 <!-- 目录树右键菜单 -->
 <div id="editor-context-menu" class="editor-context-menu">
-    <div class="ctx-item ctx-open" onclick="editorContextAction('open')"><i class="fas fa-file-alt"></i> 打开文件</div>
+    <button type="button" class="ctx-item ctx-open" onclick="editorContextAction('open')"><i class="fas fa-file-alt"></i> 打开文件</button>
     <div class="ctx-separator"></div>
-    <div class="ctx-item" onclick="editorContextAction('new-file')"><i class="fas fa-file-medical"></i> 新建文件</div>
-    <div class="ctx-item" onclick="editorContextAction('new-dir')"><i class="fas fa-folder-plus"></i> 新建目录</div>
+    <button type="button" class="ctx-item" onclick="editorContextAction('new-file')"><i class="fas fa-file-medical"></i> 新建文件</button>
+    <button type="button" class="ctx-item" onclick="editorContextAction('new-dir')"><i class="fas fa-folder-plus"></i> 新建目录</button>
     <div class="ctx-separator"></div>
-    <div class="ctx-item" onclick="editorContextAction('rename')"><i class="fas fa-edit"></i> 重命名</div>
-    <div class="ctx-item ctx-danger" onclick="editorContextAction('delete')"><i class="fas fa-trash-alt"></i> 删除</div>
+    <button type="button" class="ctx-item" onclick="editorContextAction('rename')"><i class="fas fa-edit"></i> 重命名</button>
+    <button type="button" class="ctx-item ctx-danger" onclick="editorContextAction('delete')"><i class="fas fa-trash-alt"></i> 删除</button>
 </div>
 
 <!-- 弹窗：跳转行 -->
@@ -123,11 +123,11 @@
     <div class="modal-content" style="width:300px">
         <div class="modal-header">
             <h3>跳转到行</h3>
-            <span class="close" onclick="closeModal('editor-jump-modal')">&times;</span>
+            <button type="button" class="close" onclick="closeModal('editor-jump-modal')" aria-label="关闭">&times;</button>
         </div>
         <form id="editor-jump-form">
             <div class="form-group">
-                <label>行号</label>
+                <label for="editor-jump-line">行号</label>
                 <input type="number" id="editor-jump-line" required min="1" placeholder="输入行号">
             </div>
             <div class="modal-footer">
@@ -143,7 +143,7 @@
     <div class="modal-content" style="width:400px">
         <div class="modal-header">
             <h3>编辑器快捷键</h3>
-            <span class="close" onclick="closeModal('editor-shortcuts-modal')">&times;</span>
+            <button type="button" class="close" onclick="closeModal('editor-shortcuts-modal')" aria-label="关闭">&times;</button>
         </div>
         <div class="modal-body" style="padding:20px">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:0.9rem">
