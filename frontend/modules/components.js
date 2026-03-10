@@ -28,7 +28,7 @@ class ServerCard extends HTMLElement {
         if (!s) return;
 
         // 获取图标 (复用 app.js 的逻辑，通过全局获取)
-        const icon = window.getServerIcon ? window.getServerIcon(s.device_type) : 'fas fa-server';
+        const icon = globalThis.getServerIcon ? globalThis.getServerIcon(s.device_type) : 'fas fa-server';
         const safeName = s.name.replace(/'/g, "\\'");
 
         this.className = 'server-card';
@@ -40,20 +40,20 @@ class ServerCard extends HTMLElement {
                 <p>${s.host}:${s.port}</p>
             </div>
             <div class="server-card-actions">
-                <button class="btn-icon" title="清除状态记录" onclick="event.stopPropagation(); window.clearServerStats(${s.id}, '${safeName}')">
+                <button class="btn-icon" title="清除状态记录" onclick="event.stopPropagation(); globalThis.clearServerStats(${s.id}, '${safeName}')">
                     <i class="fas fa-eraser"></i>
                 </button>
-                <button class="btn-icon" title="编辑" onclick="event.stopPropagation(); window.showEditServerModal(${s.id})">
+                <button class="btn-icon" title="编辑" onclick="event.stopPropagation(); globalThis.showEditServerModal(${s.id})">
                     <i class="fas fa-edit"></i>
                 </button>
-                <button class="btn-icon" title="删除" onclick="event.stopPropagation(); window.deleteServer(${s.id}, '${safeName}')">
+                <button class="btn-icon" title="删除" onclick="event.stopPropagation(); globalThis.deleteServer(${s.id}, '${safeName}')">
                     <i class="fas fa-trash-alt"></i>
                 </button>
             </div>
         `;
         
         this.onclick = () => {
-            if (window.connectToServer) window.connectToServer(s);
+            if (globalThis.connectToServer) globalThis.connectToServer(s);
         };
     }
 }

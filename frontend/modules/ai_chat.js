@@ -60,6 +60,110 @@ const aiMessages = document.getElementById('ai-messages');
 const aiInput = document.getElementById('ai-input');
 const sendBtn = document.getElementById('send-btn');
 const roleSelect = document.getElementById('ai-role-select');
+let aiContextMenuEl = null;
+
+async function copyTextToClipboard(text) {
+    if (!text) return false;
+    try {
+        if (globalThis.pywebview?.api?.set_clipboard_text) {
+            const ok = await globalThis.pywebview.api.set_clipboard_text(text);
+            if (ok) return true;
+        }
+    } catch (e) {}
+    try {
+        if (navigator.clipboard && globalThis.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (e) {}
+    return false;
+}
+
+function getSelectedTextInAIMessages() {
+    const sel = globalThis.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return '';
+    const range = sel.getRangeAt(0);
+    const container = range.commonAncestorContainer.nodeType === Node.TEXT_NODE
+        ? range.commonAncestorContainer.parentNode
+        : range.commonAncestorContainer;
+    if (!container || !aiMessages.contains(container)) return '';
+    return sel.toString().trim();
+}
+
+function hideAIContextMenu() {
+    if (aiContextMenuEl) {
+        aiContextMenuEl.remove();
+        aiContextMenuEl = null;
+    }
+}
+
+function showAIContextMenu(x, y) {
+    hideAIContextMenu();
+    const selectedText = getSelectedTextInAIMessages();
+    if (!selectedText) return;
+
+    const menu = document.createElement('div');
+    menu.style.cssText = `
+        position: fixed;
+        left: ${x}px;
+        top: ${y}px;
+        min-width: 120px;
+        background: #252526;
+        border: 1px solid #3c3c3c;
+        border-radius: 6px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+        z-index: 10000;
+        padding: 4px 0;
+        color: #ddd;
+        font-size: 13px;
+    `;
+
+    const item = document.createElement('div');
+    item.textContent = '复制 (Ctrl+C)';
+    item.style.cssText = 'padding:8px 12px; cursor:pointer; user-select:none;';
+    item.onmouseenter = () => { item.style.background = '#3a3d41'; };
+    item.onmouseleave = () => { item.style.background = 'transparent'; };
+    item.onclick = async () => {
+        hideAIContextMenu();
+        const text = getSelectedTextInAIMessages();
+        if (!text) return;
+        const ok = await copyTextToClipboard(text);
+        notify(ok ? '已复制选中文本' : '复制失败，请检查系统剪贴板权限', ok ? 'success' : 'error');
+    };
+    menu.appendChild(item);
+    document.body.appendChild(menu);
+    aiContextMenuEl = menu;
+}
+
+function bindAICopyInteractions() {
+    // 右键菜单复制
+    aiMessages.addEventListener('contextmenu', (e) => {
+        const selectedText = getSelectedTextInAIMessages();
+        if (!selectedText) return;
+        e.preventDefault();
+        showAIContextMenu(e.clientX, e.clientY);
+    });
+
+    // AI 面板快捷复制：Ctrl/Cmd + C（仅当选区在 AI 消息区）
+    document.addEventListener('keydown', (e) => {
+        const platformHint = navigator?.userAgentData?.platform || navigator?.userAgent || '';
+        const isMac = /Mac|iPhone|iPad|iPod/i.test(platformHint);
+        const mainMod = isMac ? e.metaKey : e.ctrlKey;
+        if (!mainMod || e.shiftKey || e.altKey) return;
+        if (e.key !== 'c' && e.key !== 'C') return;
+        const selectedText = getSelectedTextInAIMessages();
+        if (!selectedText) return;
+        e.preventDefault();
+        copyTextToClipboard(selectedText).then(ok => {
+            notify(ok ? '已复制选中文本' : '复制失败，请检查系统剪贴板权限', ok ? 'success' : 'error');
+        });
+    }, true);
+
+    document.addEventListener('click', hideAIContextMenu);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideAIContextMenu();
+    });
+}
 
 // 所有可用角色列表（{id, name, is_active}）
 let allRoles = [];
@@ -94,17 +198,18 @@ async function loadRoles() {
 
 // 获取当前激活 tab 的角色 ID
 function getCurrentRoleId() {
-    const tab = store.activeTabId ? window.getTab(store.activeTabId) : null;
+    const tab = store.activeTabId ? globalThis.getTab(store.activeTabId) : null;
     if (tab && tab.roleId) return tab.roleId;
     return defaultRoleId;
 }
 
 export function initAIModule() {
+    bindAICopyInteractions();
     // 加载角色列表
     loadRoles();
 
     // 初始化文档按钮状态
-    const tab = store.activeTabId ? window.getTab(store.activeTabId) : null;
+    const tab = store.activeTabId ? globalThis.getTab(store.activeTabId) : null;
     updateServerDocButtonState(tab);
 
     // 绑定发送按钮
@@ -122,36 +227,36 @@ export function initAIModule() {
 
     // 角色切换：更新当前 tab 的 roleId
     roleSelect.onchange = () => {
-        const tab = store.activeTabId ? window.getTab(store.activeTabId) : null;
+        const tab = store.activeTabId ? globalThis.getTab(store.activeTabId) : null;
         if (tab) {
-            tab.roleId = parseInt(roleSelect.value);
+            tab.roleId = Number.parseInt(roleSelect.value, 10);
         }
     };
 
     // 监听终端输出捕获完成事件，自动发给 AI 分析
-    window.addEventListener('captureReady', (e) => {
+    globalThis.addEventListener('captureReady', (e) => {
         const { tabId, output } = e.detail;
         sendCaptureToAI(tabId, output);
     });
 
     // 所有连接关闭后，清空 AI 对话面板并停止正在进行的流
-    window.addEventListener('allTabsClosed', () => {
+    globalThis.addEventListener('allTabsClosed', () => {
         stopAI();
         lastSentCaptureFingerprint.clear();
         aiMessages.innerHTML = '<div class="message system" style="text-align:center;color:#666;padding:20px;">暂无活跃连接，请先连接服务器</div>';
     });
 
     // 标签切换：刷新消息列表 + 同步角色选择器 + 文档按钮状态
-    window.addEventListener('tabSwitched', (e) => {
+    globalThis.addEventListener('tabSwitched', (e) => {
         updateServerDocButtonState(e.detail.tab);
         const tab = e.detail.tab;
         
         // 核心逻辑：场景驱动的角色自动切换
         let roleIdToSelect = tab.roleId; // 优先使用该会话手动选过的角色
         
-        if (!roleIdToSelect && window.allDeviceTypes) {
+        if (!roleIdToSelect && globalThis.allDeviceTypes) {
             // 如果没手动选过，根据服务器 device_type 寻找绑定的角色
-            const dtype = window.allDeviceTypes.find(t => t.value === (tab.config.device_type_value || tab.config.device_type));
+            const dtype = globalThis.allDeviceTypes.find(t => t.value === (tab.config.device_type_value || tab.config.device_type));
             if (dtype && dtype.role_id) {
                 roleIdToSelect = dtype.role_id;
                 console.log(`🎯 检测到设备类型 ${tab.config.device_type_value || tab.config.device_type}，自动匹配 AI 角色 ID: ${roleIdToSelect}`);
@@ -179,15 +284,15 @@ export function initAIModule() {
         aiMessages.scrollTop = aiMessages.scrollHeight;
     });
 
-    window.addEventListener('allTabsClosed', () => updateServerDocButtonState(null));
+    globalThis.addEventListener('allTabsClosed', () => updateServerDocButtonState(null));
 
     // 角色在"AI 角色"页面被修改后，重新加载角色列表
-    window.addEventListener('rolesChanged', () => loadRoles());
+    globalThis.addEventListener('rolesChanged', () => loadRoles());
 
     // 暴露清空对话、文档弹窗给全局
-    window.clearChat = clearChat;
-    window.showServerDocModal = showServerDocModal;
-    window.saveServerDoc = saveServerDoc;
+    globalThis.clearChat = clearChat;
+    globalThis.showServerDocModal = showServerDocModal;
+    globalThis.saveServerDoc = saveServerDoc;
 }
 
 // 服务器文档模板（按 device_type 选择）
@@ -367,7 +472,7 @@ function updateServerDocButtonState(tab) {
 
 // 打开服务器文档弹窗
 async function showServerDocModal() {
-    const tab = store.activeTabId ? window.getTab(store.activeTabId) : null;
+    const tab = store.activeTabId ? globalThis.getTab(store.activeTabId) : null;
     if (!tab?.config?.id) {
         notify('请先连接服务器', 'warning');
         return;
@@ -409,7 +514,7 @@ async function saveServerDoc() {
     const saveBtn = document.getElementById('server-doc-save-btn');
     setBtnLoading(saveBtn, true);
     try {
-        await api.updateServerDoc(parseInt(serverId, 10), contentEl.value || '');
+        await api.updateServerDoc(Number.parseInt(serverId, 10), contentEl.value || '');
         notify('文档已保存', 'success');
         closeModal('server-doc-modal');
     } catch (e) {
@@ -426,7 +531,7 @@ async function handleAISend() {
     const prompt = aiInput.value.trim();
     aiInput.value = '';
     
-    const tab = window.getTab(store.activeTabId); 
+    const tab = globalThis.getTab(store.activeTabId); 
     if (!tab) return;
 
     appendMessage('user', prompt, tab);
@@ -445,7 +550,7 @@ function openAISocket(messages, tab) {
     sendBtn.innerHTML = '<i class="fas fa-stop"></i>';
     sendBtn.onclick = stopAI;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const protocol = globalThis.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const mode = document.getElementById('ai-mode-select').value;
     const roleId = getCurrentRoleId();
     const token = localStorage.getItem('xterm_token');
@@ -459,7 +564,7 @@ function openAISocket(messages, tab) {
     const tokenParam = token ? `&token=${token}` : '';
     const contextParam = `&device_type=${deviceType}&server_name=${serverName}` + (serverId ? `&server_id=${serverId}` : '');
     
-    const wsUrl = `${protocol}//${window.location.host}/ws/ai?mode=${mode}${roleParam}${tokenParam}${contextParam}`;
+    const wsUrl = `${protocol}//${globalThis.location.host}/ws/ai?mode=${mode}${roleParam}${tokenParam}${contextParam}`;
     if (typeof console !== 'undefined' && console.debug) {
         console.debug('[AI] 连接中:', wsUrl.replace(/token=[^&]+/, 'token=***'));
     }
@@ -530,7 +635,7 @@ function captureFingerprint(cleanOutput) {
 
 // 捕获终端输出后自动提交给 AI 分析
 function sendCaptureToAI(tabId, output) {
-    const tab = window.getTab(tabId);
+    const tab = globalThis.getTab(tabId);
     if (!tab || isAiProcessing) return;
 
     // 仅当捕获来源 tab 为当前激活 tab 时才发送，避免用户在切换标签后仍收到旧 tab 的 capture
@@ -935,7 +1040,7 @@ function executeAICommand(command, tab) {
 // 清空对话
 export function clearChat() {
     if (!store.activeTabId) return;
-    const tab = window.getTab(store.activeTabId);
+    const tab = globalThis.getTab(store.activeTabId);
     if (tab) {
         tab.chatHistory = [];
         lastSentCaptureFingerprint.delete(tab.id);

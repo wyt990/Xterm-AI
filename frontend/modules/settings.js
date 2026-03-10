@@ -9,13 +9,13 @@ export function initSettingsModule() {
     initForms();
     
     // 暴露全局函数 (兼容 index.html)
-    window.showAddServerModal = () => {
+    globalThis.showAddServerModal = () => {
         document.getElementById('server-modal-title').innerText = '添加服务器';
         document.getElementById('server-form').reset();
         document.getElementById('server-id').value = '';
         showModal('server-modal');
     };
-    window.showEditServerModal = async (id) => {
+    globalThis.showEditServerModal = async (id) => {
         try {
             const servers = await api.getServers();
             const server = servers.find(s => s.id === id);
@@ -34,13 +34,13 @@ export function initSettingsModule() {
             showModal('server-modal');
         } catch (err) { notify("获取服务器信息失败", "error"); }
     };
-    window.showAddAIModal = () => {
+    globalThis.showAddAIModal = () => {
         document.getElementById('ai-modal-title').innerText = '添加 AI 端点';
         document.getElementById('ai-form').reset();
         document.getElementById('ai-id').value = '';
         showModal('ai-modal');
     };
-    window.showAddRoleModal = async () => {
+    globalThis.showAddRoleModal = async () => {
         document.getElementById('role-modal-title').innerText = '创建 AI 角色';
         document.getElementById('role-form').reset();
         document.getElementById('role-id').value = '';
@@ -48,23 +48,23 @@ export function initSettingsModule() {
         await loadRoleDeviceTypeCheckboxes(null);
         showModal('role-modal');
     };
-    window.testAIFromModal = testAIFromModal;
-    window.testSSHFromModal = testSSHFromModal;
-    window.showLogsModal = showLogsModal;
-    window.loadLogContent = loadLogContent;
-    window.handleClearLogs = handleClearLogs;
-    window.handleBackupDatabase = handleBackupDatabase;
-    window.handleClearAiProxy = handleClearAiProxy;
-    window.handleClearAllStatsHistory = handleClearAllStatsHistory;
+    globalThis.testAIFromModal = testAIFromModal;
+    globalThis.testSSHFromModal = testSSHFromModal;
+    globalThis.showLogsModal = showLogsModal;
+    globalThis.loadLogContent = loadLogContent;
+    globalThis.handleClearLogs = handleClearLogs;
+    globalThis.handleBackupDatabase = handleBackupDatabase;
+    globalThis.handleClearAiProxy = handleClearAiProxy;
+    globalThis.handleClearAllStatsHistory = handleClearAllStatsHistory;
 
     // 命令管理
-    window.showAddCommandGroupModal = () => {
+    globalThis.showAddCommandGroupModal = () => {
         document.getElementById('command-group-modal-title').innerText = '添加命令分类';
         document.getElementById('command-group-form').reset();
         document.getElementById('command-group-id').value = '';
         showModal('command-group-modal');
     };
-    window.showAddCommandModal = () => {
+    globalThis.showAddCommandModal = () => {
         const groupId = document.querySelector('.commands-sidebar-item.active')?.getAttribute('data-id');
         if (!groupId) return notify("请先选择一个命令分类", "warning");
         document.getElementById('command-modal-title').innerText = '添加快捷命令';
@@ -75,23 +75,23 @@ export function initSettingsModule() {
     };
     
     // 代理管理
-    window.showAddProxyModal = showAddProxyModal;
-    window.editProxy = (id) => { /* 由 loadProxies 动态绑定 */ };
-    window.deleteProxy = (id) => { /* 由 loadProxies 动态绑定 */ };
+    globalThis.showAddProxyModal = showAddProxyModal;
+    globalThis.editProxy = (id) => { /* 由 loadProxies 动态绑定 */ };
+    globalThis.deleteProxy = (id) => { /* 由 loadProxies 动态绑定 */ };
 
     // 技能管理
-    window.showAddSkillModal = showAddSkillModal;
-    window.showSkillStoreModal = showSkillStoreModal;
-    window.translateSkillDescription = translateSkillDescription;
-    window.loadSkills = loadSkills;
+    globalThis.showAddSkillModal = showAddSkillModal;
+    globalThis.showSkillStoreModal = showSkillStoreModal;
+    globalThis.translateSkillDescription = translateSkillDescription;
+    globalThis.loadSkills = loadSkills;
 
     // 角色与 AI 列表中的操作按钮需要全局访问
-    window.editAI = (id) => { /* 逻辑已在 loadAIEndpoints 中动态绑定 */ };
-    window.setActiveAI = async (id) => { await api.setActiveAI(id); loadAIEndpoints(); };
-    window.deleteAI = async (id) => { if(confirm('确定删除?')){ await api.deleteAIEndpoint(id); loadAIEndpoints(); }};
-    window.editRole = (id) => { /* 逻辑已在 loadRoles 中动态绑定 */ };
-    window.setActiveRole = async (id) => { await api.setActiveRole(id); loadRoles(); };
-    window.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id); loadRoles(); }};
+    globalThis.editAI = (id) => { /* 逻辑已在 loadAIEndpoints 中动态绑定 */ };
+    globalThis.setActiveAI = async (id) => { await api.setActiveAI(id); loadAIEndpoints(); };
+    globalThis.deleteAI = async (id) => { if(confirm('确定删除?')){ await api.deleteAIEndpoint(id); loadAIEndpoints(); }};
+    globalThis.editRole = (id) => { /* 逻辑已在 loadRoles 中动态绑定 */ };
+    globalThis.setActiveRole = async (id) => { await api.setActiveRole(id); loadRoles(); };
+    globalThis.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id); loadRoles(); }};
 }
 
 // --- 代理管理 ---
@@ -148,7 +148,7 @@ export async function loadProxies() {
             `;
         }).join('');
 
-        window.editProxy = async (id) => {
+        globalThis.editProxy = async (id) => {
             const proxy = proxies.find(pr => pr.id === id);
             if (!proxy) return;
             document.getElementById('proxy-modal-title').innerText = '编辑代理';
@@ -168,7 +168,7 @@ export async function loadProxies() {
             form.querySelector('input[name="bind_skills"]').checked = bindings.skills === proxy.id;
             showModal('proxy-modal');
         };
-        window.deleteProxy = async (id, name) => {
+        globalThis.deleteProxy = async (id, name) => {
             if (!confirm(`确定要删除代理「${name}」吗？`)) return;
             try {
                 await api.deleteProxy(id);
@@ -245,7 +245,7 @@ export async function loadSkills() {
         container.innerHTML = skills.map(s => {
             const desc = (s.description_zh || s.description || '').substring(0, 80);
             const typeLabels = (s.bound_device_type_ids || []).map(id => {
-                const t = window.allDeviceTypes?.find(d => d.id === id);
+                const t = globalThis.allDeviceTypes?.find(d => d.id === id);
                 return t ? t.name : '';
             }).filter(Boolean).join('、') || '未绑定';
             const isRemote = (s.source || 'local') !== 'local';
@@ -270,7 +270,7 @@ export async function loadSkills() {
             `;
         }).join('');
 
-        window.editSkill = async (id) => {
+        globalThis.editSkill = async (id) => {
             const skill = skills.find(s => s.id === id);
             if (!skill) return;
             document.getElementById('skill-modal-title').innerText = '编辑技能';
@@ -287,21 +287,21 @@ export async function loadSkills() {
             await loadSkillDeviceTypeCheckboxes(skill.bound_device_type_ids || []);
             showModal('skill-modal');
         };
-        window.toggleSkill = async (id) => {
+        globalThis.toggleSkill = async (id) => {
             try {
                 const res = await api.toggleSkill(id);
                 notify(res.is_enabled ? '已启用' : '已禁用', 'success');
                 loadSkills();
             } catch (err) { notify('操作失败: ' + err.message, 'error'); }
         };
-        window.refreshSkill = async (id) => {
+        globalThis.refreshSkill = async (id) => {
             try {
                 await api.refreshSkill(id);
                 notify('已从远程更新技能内容', 'success');
                 loadSkills();
             } catch (err) { notify('刷新失败: ' + err.message, 'error'); }
         };
-        window.deleteSkill = async (id, name) => {
+        globalThis.deleteSkill = async (id, name) => {
             if (!confirm(`确定要删除技能「${name}」吗？`)) return;
             try {
                 await api.deleteSkill(id);
@@ -442,8 +442,8 @@ async function loadSkillsFromRepo() {
     }
 }
 
-window.loadSkillsFromRepo = loadSkillsFromRepo;
-window.skillStoreSelectInstall = skillStoreSelectInstall;
+globalThis.loadSkillsFromRepo = loadSkillsFromRepo;
+globalThis.skillStoreSelectInstall = skillStoreSelectInstall;
 
 function skillStoreSelectInstall(ev, btn, skillData) {
     let data = skillData;
@@ -499,12 +499,12 @@ async function loadSkillStoreDeviceTypes(recommendedValues = []) {
     } catch (err) { console.error(err); }
 }
 
-window.skillStoreCancelInstall = function() {
+globalThis.skillStoreCancelInstall = function() {
     skillStorePendingInstall = null;
     document.getElementById('skill-store-install-panel').style.display = 'none';
 };
 
-window.translateStoreSkillDescription = async function() {
+globalThis.translateStoreSkillDescription = async function() {
     if (!skillStorePendingInstall?.description) return notify('该技能无英文描述可翻译', 'info');
     const descZhInput = document.getElementById('skill-store-desc-zh');
     if (!descZhInput) return;
@@ -522,7 +522,7 @@ window.translateStoreSkillDescription = async function() {
     }
 };
 
-window.skillStoreDoInstall = async function() {
+globalThis.skillStoreDoInstall = async function() {
     if (!skillStorePendingInstall) return;
     const descZhInput = document.getElementById('skill-store-desc-zh');
     const descZh = descZhInput?.value?.trim() || skillStorePendingInstall.description_zh || null;
@@ -554,7 +554,7 @@ export async function initSkillFilters() {
     if (!deviceSelect) return;
     try {
         const types = await api.getDeviceTypes();
-        window.allDeviceTypes = types;
+        globalThis.allDeviceTypes = types;
         const currentVal = deviceSelect.value;
         deviceSelect.innerHTML = '<option value="">全部设备类型</option>' + types.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
         if (currentVal) deviceSelect.value = currentVal;
@@ -612,7 +612,7 @@ export async function loadAIEndpoints() {
             </div>
         `).join('');
         
-        window.editAI = async (id) => {
+        globalThis.editAI = async (id) => {
             const ai = endpoints.find(a => a.id === id);
             document.getElementById('ai-modal-title').innerText = '编辑 AI 端点';
             document.getElementById('ai-id').value = ai.id;
@@ -624,8 +624,8 @@ export async function loadAIEndpoints() {
             document.getElementById('ai-form').model.value = ai.model;
             showModal('ai-modal');
         };
-        window.setActiveAI = async (id) => { await api.setActiveAI(id); loadAIEndpoints(); };
-        window.deleteAI = async (id) => { if(confirm('确定删除?')){ await api.deleteAIEndpoint(id); loadAIEndpoints(); }};
+        globalThis.setActiveAI = async (id) => { await api.setActiveAI(id); loadAIEndpoints(); };
+        globalThis.deleteAI = async (id) => { if(confirm('确定删除?')){ await api.deleteAIEndpoint(id); loadAIEndpoints(); }};
     } catch (err) { notify("加载 AI 端点失败", "error"); }
 }
 
@@ -676,7 +676,7 @@ export async function loadRoles() {
             </div>
         `).join('');
         
-        window.editRole = async (id) => {
+        globalThis.editRole = async (id) => {
             const role = roles.find(r => r.id === id);
             document.getElementById('role-modal-title').innerText = '编辑 AI 角色';
             document.getElementById('role-id').value = role.id;
@@ -688,8 +688,8 @@ export async function loadRoles() {
             await loadRoleDeviceTypeCheckboxes(role.id);
             showModal('role-modal');
         };
-        window.setActiveRole = async (id) => { await api.setActiveRole(id); loadRoles(); };
-        window.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id); loadRoles(); }};
+        globalThis.setActiveRole = async (id) => { await api.setActiveRole(id); loadRoles(); };
+        globalThis.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id); loadRoles(); }};
     } catch (err) { notify("加载角色失败", "error"); }
 }
 
@@ -775,7 +775,7 @@ async function handleClearAllStatsHistory() {
     try {
         await api.clearAllStatsHistory();
         notify("已清除所有服务器的状态记录", "success");
-        window.dispatchEvent(new CustomEvent('statsCleared', { detail: { serverId: null, clearAll: true } }));
+        globalThis.dispatchEvent(new CustomEvent('statsCleared', { detail: { serverId: null, clearAll: true } }));
     } catch (err) { notify("清除失败: " + err.message, "error"); }
 }
 
@@ -797,7 +797,7 @@ function initForms() {
                 else await api.addServer(data);
                 closeModal('server-modal');
                 notify("保存服务器成功", "success");
-                window.dispatchEvent(new CustomEvent('serversChanged'));
+                globalThis.dispatchEvent(new CustomEvent('serversChanged'));
             } catch (err) { notify("保存失败: " + err.message, "error"); }
             finally { setBtnLoading(submitBtn, false); }
         };
@@ -825,7 +825,7 @@ function initForms() {
                 closeModal('role-modal');
                 notify("保存角色成功", "success");
                 loadRoles();
-                if (window.loadDeviceTypes) window.loadDeviceTypes();
+                if (globalThis.loadDeviceTypes) globalThis.loadDeviceTypes();
             } catch (err) { notify("保存角色失败: " + err.message, "error"); }
             finally { setBtnLoading(submitBtn, false); }
         };
@@ -872,7 +872,7 @@ function initForms() {
                 if (id) await api.updateCommandGroup(id, name);
                 else await api.addCommandGroup(name);
                 closeModal('command-group-modal');
-                window.dispatchEvent(new CustomEvent('commandsChanged'));
+                globalThis.dispatchEvent(new CustomEvent('commandsChanged'));
             } catch (err) { notify("操作失败: " + err.message, "error"); }
             finally { setBtnLoading(submitBtn, false); }
         };
@@ -897,7 +897,7 @@ function initForms() {
                 if (id) await api.updateCommand(id, data);
                 else await api.addCommand(data);
                 closeModal('command-modal');
-                window.dispatchEvent(new CustomEvent('commandsChanged'));
+                globalThis.dispatchEvent(new CustomEvent('commandsChanged'));
             } catch (err) { notify("操作失败: " + err.message, "error"); }
             finally { setBtnLoading(submitBtn, false); }
         };

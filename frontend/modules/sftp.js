@@ -25,22 +25,22 @@ export function initSFTPModule() {
     if (!fileListElement) return;
 
     // 暴露全局函数给 index.html
-    window.sftpGoBack = () => {
+    globalThis.sftpGoBack = () => {
         if (!currentPath || currentPath === '/') return;
         const parts = currentPath.split('/').filter(p => p);
         parts.pop();
         loadFiles('/' + parts.join('/') || '/');
     };
-    window.sftpRefresh = () => loadFiles(currentPath);
-    window.showUploadModal = () => document.getElementById('sftp-upload-input').click();
-    window.handleSftpUpload = (e) => {
+    globalThis.sftpRefresh = () => loadFiles(currentPath);
+    globalThis.showUploadModal = () => document.getElementById('sftp-upload-input').click();
+    globalThis.handleSftpUpload = (e) => {
         // 先将 FileList 转成普通数组，再重置 input value
         // 避免部分浏览器在 value='' 后 FileList 引用被清空导致只上传第一个文件
         const files = Array.from(e.target.files);
         e.target.value = '';
         if (files.length > 0) uploadFiles(files);
     };
-    window.loadSftpFiles = (path) => loadFiles(path);
+    globalThis.loadSftpFiles = (path) => loadFiles(path);
 
     // 绑定文件列表容器右键（空白处）：在 initSFTPModule 中一次性绑定，不依赖 renderFileList
     fileListElement.addEventListener('contextmenu', (e) => {
@@ -51,7 +51,7 @@ export function initSFTPModule() {
             showContextMenu(e, false);
         }
     });
-    window.addEventListener('tabSwitched', (e) => {
+    globalThis.addEventListener('tabSwitched', (e) => {
         const tab = e.detail.tab;
         // 网络设备不支持 SFTP
         const dtype = (tab.config.device_type_value || tab.config.device_type || '').toLowerCase();
@@ -70,7 +70,7 @@ export function initSFTPModule() {
     });
 
     // 2. 初始化右键菜单全局点击关闭
-    window.addEventListener('click', () => {
+    globalThis.addEventListener('click', () => {
         if (contextMenu) contextMenu.style.display = 'none';
     });
 
@@ -81,9 +81,9 @@ export function initSFTPModule() {
     initSftpForms();
 
     // 5. 暴露全局函数 (兼容 HTML 调用)
-    window.sftpAction = sftpAction;
-    window.updateChmodValue = updateChmodValue;
-    window.loadSftpFiles = loadFiles;
+    globalThis.sftpAction = sftpAction;
+    globalThis.updateChmodValue = updateChmodValue;
+    globalThis.loadSftpFiles = loadFiles;
 }
 
 export async function loadFiles(path) {
@@ -92,7 +92,7 @@ export async function loadFiles(path) {
         notify('请先连接到一台服务器', 'warning');
         return;
     }
-    const tab = window.getTab(activeId);
+    const tab = globalThis.getTab(activeId);
     if (!tab) return;
 
     // 记录发起请求时的 tabId
@@ -168,7 +168,7 @@ function renderFileList(files) {
             if (file.is_dir) {
                 loadFiles(currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`);
             } else {
-                if (window.openFileInEditor) window.openFileInEditor(file);
+                if (globalThis.openFileInEditor) globalThis.openFileInEditor(file);
             }
         };
 
@@ -272,8 +272,8 @@ function showContextMenu(e, isFile) {
     const menuWidth = 160;
     const menuHeight = isFile ? 220 : 80;
 
-    if (x + menuWidth > window.innerWidth) x -= menuWidth;
-    if (y + menuHeight > window.innerHeight) y -= menuHeight;
+    if (x + menuWidth > globalThis.innerWidth) x -= menuWidth;
+    if (y + menuHeight > globalThis.innerHeight) y -= menuHeight;
 
     contextMenu.style.left = `${x}px`;
     contextMenu.style.top = `${y}px`;
@@ -281,14 +281,14 @@ function showContextMenu(e, isFile) {
 
 async function sftpAction(type) {
     if (!store.activeTabId) return;
-    const tab = window.getTab(store.activeTabId);
+    const tab = globalThis.getTab(store.activeTabId);
     const serverId = tab.config.id;
     const filePath = sftpSelectedFile ? (currentPath === '/' ? `/${sftpSelectedFile.name}` : `${currentPath}/${sftpSelectedFile.name}`) : currentPath;
 
     try {
         switch (type) {
             case 'download':
-                window.location.href = `/api/sftp/download?server_id=${serverId}&path=${encodeURIComponent(filePath)}`;
+                globalThis.location.href = `/api/sftp/download?server_id=${serverId}&path=${encodeURIComponent(filePath)}`;
                 break;
             case 'rename':
                 document.getElementById('sftp-rename-old-path').value = filePath;
@@ -332,7 +332,7 @@ async function sftpAction(type) {
                 showModal('sftp-create-modal');
                 break;
             case 'edit':
-                if (window.openFileInEditor) window.openFileInEditor(sftpSelectedFile);
+                if (globalThis.openFileInEditor) globalThis.openFileInEditor(sftpSelectedFile);
                 break;
         }
     } catch (err) {
@@ -377,7 +377,7 @@ function initSftpDragAndDrop() {
 
 async function uploadFiles(files) {
     if (!store.activeTabId) return;
-    const tab = window.getTab(store.activeTabId);
+    const tab = globalThis.getTab(store.activeTabId);
     if (!tab) return;
 
     notify(`正在上传 ${files.length} 个文件...`);
@@ -449,7 +449,7 @@ function initSftpForms() {
     if (renameForm) {
         renameForm.onsubmit = async (e) => {
             e.preventDefault();
-            const tab = window.getTab(store.activeTabId);
+            const tab = globalThis.getTab(store.activeTabId);
             const oldPath = document.getElementById('sftp-rename-old-path').value;
             const newName = document.getElementById('sftp-new-name').value;
             const newPath = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) + newName;
@@ -463,7 +463,7 @@ function initSftpForms() {
     if (chmodForm) {
         chmodForm.onsubmit = async (e) => {
             e.preventDefault();
-            const tab = window.getTab(store.activeTabId);
+            const tab = globalThis.getTab(store.activeTabId);
             const path = document.getElementById('sftp-chmod-path').value;
             const mode = document.getElementById('sftp-new-mode').value;
             await api.sftpChmod({ server_id: tab.config.id, path, mode });
@@ -476,7 +476,7 @@ function initSftpForms() {
     if (createForm) {
         createForm.onsubmit = async (e) => {
             e.preventDefault();
-            const tab = window.getTab(store.activeTabId);
+            const tab = globalThis.getTab(store.activeTabId);
             const type = document.getElementById('sftp-create-type').value;
             const name = document.getElementById('sftp-create-name').value;
             const path = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;

@@ -70,4 +70,4 @@ class Store {
 }
 
 export const store = new Store();
-window.store = store; // 挂载到 window 方便调试
+globalThis.store = store; // 挂载到全局对象方便调试

@@ -295,12 +295,6 @@ class SftpCreateModel(BaseModel):
     path: str
     type: str # 'file' or 'dir'
 
-# --- Web 路由 ---
-@app.get("/")
-async def get():
-    with open(os.path.join(_frontend_dir, "index.html"), "r", encoding='utf-8') as f:
-        return HTMLResponse(content=f.read())
-
 # --- 服务器管理 API ---
 @app.get("/api/servers", dependencies=[Depends(verify_token)])
 async def list_servers():
@@ -310,6 +304,29 @@ async def list_servers():
 async def add_server(server: ServerModel):
     server_id = db.add_server(server.model_dump())
     return {"id": server_id, "status": "success"}
+
+@app.get("/api/servers/recent", dependencies=[Depends(verify_token)])
+async def list_recent_servers(limit: int = 20):
+    """最近连接服务器（按 last_connected_at 倒序）"""
+    if limit < 1:
+        limit = 1
+    if limit > 100:
+        limit = 100
+    return db.get_recent_servers(limit=limit)
+
+@app.post("/api/servers/{server_id}/mark_connected", dependencies=[Depends(verify_token)])
+async def mark_server_connected(server_id: int):
+    """标记服务器最近连接时间"""
+    if not db.get_server_by_id(server_id):
+        raise HTTPException(status_code=404, detail="Server not found")
+    db.mark_server_connected(server_id)
+    return {"status": "success"}
+
+@app.delete("/api/servers/recent", dependencies=[Depends(verify_token)])
+async def clear_recent_servers():
+    """清空最近连接记录（保留服务器资产数据）"""
+    db.clear_recent_connections()
+    return {"status": "success"}
 
 @app.get("/api/servers/{server_id}", dependencies=[Depends(verify_token)])
 async def get_server(server_id: int):

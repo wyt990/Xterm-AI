@@ -13,13 +13,13 @@ let memChart = null;
 let historyTimer = null;
 
 export function initStatsModule() {
-    window.addEventListener('statsCleared', (e) => {
-        const tab = currentTabId ? window.getTab(currentTabId) : null;
+    globalThis.addEventListener('statsCleared', (e) => {
+        const tab = currentTabId ? globalThis.getTab(currentTabId) : null;
         if (!tab || !tab.config?.id) return;
         if (e.detail.clearAll || tab.config.id === e.detail.serverId) loadStatsHistory(tab.config.id);
     });
 
-    window.addEventListener('tabSwitched', (e) => {
+    globalThis.addEventListener('tabSwitched', (e) => {
         const tab = e.detail.tab;
         if (tab.id !== currentTabId) {
             startStatsMonitoring(tab);
@@ -27,7 +27,7 @@ export function initStatsModule() {
         }
     });
 
-    window.addEventListener('allTabsClosed', () => {
+    globalThis.addEventListener('allTabsClosed', () => {
         stopStatsMonitoring();
         clearStatsUI();
     });
@@ -38,7 +38,7 @@ export function initStatsModule() {
             console.log("页面不可见，暂停指标采集");
             stopStatsMonitoring();
         } else if (currentTabId) {
-            const tab = window.getTab(currentTabId);
+            const tab = globalThis.getTab(currentTabId);
             if (tab) {
                 console.log("页面恢复可见，重启指标采集");
                 startStatsMonitoring(tab);
@@ -71,9 +71,9 @@ function startStatsMonitoring(tab) {
     setTimeout(() => {
         if (currentTabId !== tab.id || document.visibilityState === 'hidden') return;
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const protocol = globalThis.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const token = localStorage.getItem('xterm_token');
-        const wsUrl = `${protocol}//${window.location.host}/ws/stats/${tab.config.id}${token ? '?token=' + token : ''}`;
+        const wsUrl = `${protocol}//${globalThis.location.host}/ws/stats/${tab.config.id}${token ? '?token=' + token : ''}`;
 
         statsSocket = new WebSocket(wsUrl);
         statsSocket.onmessage = (event) => {
@@ -203,7 +203,7 @@ function updateStatsUI(stats, serverId) {
 }
 
 // 暴露给全局调用 (用于 onclick)
-window.killProcess = async (serverId, pid, cmdInfo) => {
+globalThis.killProcess = async (serverId, pid, cmdInfo) => {
     if (!pid) return notify("无法获取进程 PID", "error");
 
     if (!confirm(`确定要结束进程 PID: ${pid} (${cmdInfo.substring(0, 20)}...) 吗？`)) return;

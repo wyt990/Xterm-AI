@@ -208,6 +208,9 @@ class Database:
                 types = cursor.fetchall()
                 for tid, val in types:
                     cursor.execute("UPDATE servers SET device_type_id = ? WHERE device_type = ?", (tid, val))
+            # 自动迁移：servers 表增加最近连接时间
+            if 'last_connected_at' not in server_cols:
+                cursor.execute("ALTER TABLE servers ADD COLUMN last_connected_at TIMESTAMP")
             
             # 11. 代理表 (proxy 功能 Phase 1)
             cursor.execute('''
@@ -376,6 +379,45 @@ class Database:
             cursor.execute('DELETE FROM server_stats_history WHERE server_id = ?', (server_id,))
             cursor.execute('DELETE FROM server_docs WHERE server_id = ?', (server_id,))
             cursor.execute('DELETE FROM servers WHERE id = ?', (server_id,))
+            conn.commit()
+
+    def mark_server_connected(self, server_id):
+        """记录服务器最近连接时间（用于最近连接列表）"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE servers SET last_connected_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (server_id,)
+            )
+            conn.commit()
+
+    def get_recent_servers(self, limit=20):
+        """获取最近连接的服务器（按连接时间倒序）"""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT s.*, dt.value as device_type_value, dt.name as device_type_name
+                FROM servers s
+                LEFT JOIN device_types dt ON s.device_type_id = dt.id
+                WHERE s.last_connected_at IS NOT NULL
+                ORDER BY datetime(s.last_connected_at) DESC
+                LIMIT ?
+            ''', (int(limit),))
+            rows = [dict(row) for row in cursor.fetchall()]
+            for r in rows:
+                # 最近连接列表不返回敏感凭据字段
+                r.pop('password', None)
+                r.pop('private_key', None)
+                if not r.get('device_type_value'):
+                    r['device_type_value'] = r.get('device_type') or 'linux'
+            return rows
+
+    def clear_recent_connections(self):
+        """清空最近连接（仅清空连接时间字段）"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE servers SET last_connected_at = NULL WHERE last_connected_at IS NOT NULL")
             conn.commit()
 
     # --- 服务器文档 ---

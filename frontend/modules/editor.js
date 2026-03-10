@@ -72,34 +72,34 @@ export function initEditorModule() {
     initTreeResizer();
 
     // 暴露全局函数
-    window.openFileInEditor      = openFileInEditor;
-    window.saveEditorContent     = saveEditorContent;
-    window.saveAllEditorTabs     = saveAllEditorTabs;
-    window.refreshEditorContent  = refreshEditorContent;
-    window.closeEditorModal      = closeEditorModal;
-    window.changeEditorTheme     = changeEditorTheme;
-    window.changeEditorFontSize  = changeEditorFontSize;
-    window.changeEditorTabSize   = changeEditorTabSize;
-    window.toggleEditorSettingsMenu = toggleEditorSettingsMenu;
-    window.toggleEditorOption    = toggleEditorOption;
-    window.showJumpLine          = () => showModal('editor-jump-modal');
-    window.showShortcuts         = () => showModal('editor-shortcuts-modal');
-    window.toggleEditorSearch    = (m) => aceEditor.execCommand(m === 'find' ? 'find' : 'replace');
-    window.switchEditorTab       = switchEditorTab;
-    window.closeEditorTab        = closeEditorTab;
-    window.toggleTreeDir         = toggleTreeDir;
-    window.editorNavigateTo      = editorNavigateTo;
-    window.editorNewFile         = editorNewFile;
-    window.editorNewDir          = editorNewDir;
-    window.refreshFiletree       = refreshFiletree;
-    window.showEditorContextMenu = showEditorContextMenu;
-    window.editorContextAction   = editorContextAction;
+    globalThis.openFileInEditor      = openFileInEditor;
+    globalThis.saveEditorContent     = saveEditorContent;
+    globalThis.saveAllEditorTabs     = saveAllEditorTabs;
+    globalThis.refreshEditorContent  = refreshEditorContent;
+    globalThis.closeEditorModal      = closeEditorModal;
+    globalThis.changeEditorTheme     = changeEditorTheme;
+    globalThis.changeEditorFontSize  = changeEditorFontSize;
+    globalThis.changeEditorTabSize   = changeEditorTabSize;
+    globalThis.toggleEditorSettingsMenu = toggleEditorSettingsMenu;
+    globalThis.toggleEditorOption    = toggleEditorOption;
+    globalThis.showJumpLine          = () => showModal('editor-jump-modal');
+    globalThis.showShortcuts         = () => showModal('editor-shortcuts-modal');
+    globalThis.toggleEditorSearch    = (m) => aceEditor.execCommand(m === 'find' ? 'find' : 'replace');
+    globalThis.switchEditorTab       = switchEditorTab;
+    globalThis.closeEditorTab        = closeEditorTab;
+    globalThis.toggleTreeDir         = toggleTreeDir;
+    globalThis.editorNavigateTo      = editorNavigateTo;
+    globalThis.editorNewFile         = editorNewFile;
+    globalThis.editorNewDir          = editorNewDir;
+    globalThis.refreshFiletree       = refreshFiletree;
+    globalThis.showEditorContextMenu = showEditorContextMenu;
+    globalThis.editorContextAction   = editorContextAction;
 }
 
 // ===================== 打开文件（从 SFTP 面板调用）=====================
 export async function openFileInEditor(file) {
     if (!store.activeTabId) return;
-    const sshTab = window.getTab(store.activeTabId);
+    const sshTab = globalThis.getTab(store.activeTabId);
     const serverId = sshTab.config.id;
     const base = sshTab.sftpCurrentPath || '/';
     const filePath = base === '/' ? `/${file.name}` : `${base}/${file.name}`;
@@ -352,8 +352,8 @@ function showEditorContextMenu(e, node) {
     if (openItem) openItem.style.display = node.type === 'file' ? '' : 'none';
     menu.style.display = 'block';
     // 防止超出视窗
-    const x = Math.min(e.clientX, window.innerWidth - 180);
-    const y = Math.min(e.clientY, window.innerHeight - 180);
+    const x = Math.min(e.clientX, globalThis.innerWidth - 180);
+    const y = Math.min(e.clientY, globalThis.innerHeight - 180);
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
 }

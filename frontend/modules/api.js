@@ -39,7 +39,7 @@ async function request(url, options = {}) {
                 }).catch(() => {});
             } catch (e) {}
             // Token 失效，跳转到登录或显示登录弹窗
-            window.dispatchEvent(new CustomEvent('authError'));
+            globalThis.dispatchEvent(new CustomEvent('authError'));
             throw new Error('未登录或登录过期');
         }
 
@@ -58,9 +58,12 @@ export const api = {
     
     // 服务器管理
     getServers: () => request('/api/servers'),
+    getRecentConnections: (limit = 20) => request(`/api/servers/recent?limit=${limit}`),
     addServer: (data) => request('/api/servers', { method: 'POST', body: JSON.stringify(data) }),
     updateServer: (id, data) => request(`/api/servers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteServer: (id) => request(`/api/servers/${id}`, { method: 'DELETE' }),
+    markServerConnected: (id) => request(`/api/servers/${id}/mark_connected`, { method: 'POST' }),
+    clearRecentConnections: () => request('/api/servers/recent', { method: 'DELETE' }),
     testServer: (data) => request('/api/servers/test', { method: 'POST', body: JSON.stringify(data) }),
     getServerDoc: (id) => request(`/api/servers/${id}/doc`),
     updateServerDoc: (id, content) => request(`/api/servers/${id}/doc`, { method: 'PUT', body: JSON.stringify({ content }) }),

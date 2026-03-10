@@ -7,6 +7,7 @@ import socket
 import uvicorn
 import multiprocessing
 import shutil
+import tkinter as tk
 
 # 允许 PyInstaller 打包时正确处理多进程
 if __name__ == '__main__':
@@ -18,6 +19,47 @@ def _log(msg):
         print(msg)
     except (ValueError, OSError):
         pass
+
+
+class DesktopBridge:
+    """前端 JS 可调用的桌面能力桥接"""
+
+    def get_clipboard_text(self):
+        """读取系统剪贴板文本（用于终端粘贴，避免浏览器权限弹窗）"""
+        root = None
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            text = root.clipboard_get()
+            return text if isinstance(text, str) else ""
+        except Exception:
+            return ""
+        finally:
+            try:
+                if root:
+                    root.destroy()
+            except Exception:
+                pass
+
+    def set_clipboard_text(self, text):
+        """写入系统剪贴板文本（用于前端复制，避免依赖已弃用 Web API）"""
+        root = None
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            value = text if isinstance(text, str) else str(text or "")
+            root.clipboard_clear()
+            root.clipboard_append(value)
+            root.update()
+            return True
+        except Exception:
+            return False
+        finally:
+            try:
+                if root:
+                    root.destroy()
+            except Exception:
+                pass
 
 def find_free_port():
     """动态寻找一个空闲端口"""
@@ -187,10 +229,26 @@ if __name__ == '__main__':
         f'http://127.0.0.1:{port}/frontend/index.html',
         width=1280,
         height=800,
-        min_size=(1024, 768)
+        min_size=(1024, 768),
+        # 显式开启文本选择：修复打包后 AI 对话区无法选中复制的问题
+        text_select=True,
+        js_api=DesktopBridge()
     )
     # 启动 GUI（icon: Linux 窗口图标；Windows/macOS 主要依赖 PyInstaller --icon 内嵌到 exe）
     kw = {'private_mode': False}
     if os.path.exists(_icon):
         kw['icon'] = _icon
-    webview.start(**kw)
+    # Windows 打包版优先使用 Edge(WebView2) 后端，避免回退到兼容性较差引擎
+    if os.name == 'nt':
+        kw['gui'] = 'edgechromium'
+    try:
+        webview.start(**kw)
+    except Exception as e:
+        # 兼容兜底：目标机无 WebView2 或参数不兼容时，回退默认后端避免直接崩溃
+        _startup_log(f"WebView 启动失败，参数={kw}，错误={e}")
+        if kw.get('gui'):
+            kw.pop('gui', None)
+            _startup_log("回退到默认 WebView 后端重试")
+            webview.start(**kw)
+        else:
+            raise

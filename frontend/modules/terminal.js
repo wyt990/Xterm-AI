@@ -2,7 +2,7 @@
  * SSH 终端与多标签管理模块
  */
 import { api } from './api.js';
-import { storage, notify } from './utils.js';
+import { notify } from './utils.js';
 import { store } from './store.js';
 
 // 获取状态（快捷访问）
@@ -12,10 +12,163 @@ const getActiveTabId = () => (store ? store.getState('activeTabId') : null);
 // 初始化标签栏与容器
 const tabBar = document.getElementById('tab-bar');
 const terminalStack = document.getElementById('terminal-stack');
+let terminalContextMenuEl = null;
+
+async function copyTextToClipboard(text) {
+    if (!text) return false;
+    try {
+        if (globalThis.pywebview?.api?.set_clipboard_text) {
+            const ok = await globalThis.pywebview.api.set_clipboard_text(text);
+            if (ok) return true;
+        }
+    } catch (e) {}
+    try {
+        if (navigator.clipboard && globalThis.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (e) {}
+    return false;
+}
+
+async function readTextFromClipboard() {
+    // 桌面版优先走 pywebview 原生桥接，避免每次重启都触发浏览器剪贴板权限弹窗
+    try {
+        if (globalThis.pywebview?.api?.get_clipboard_text) {
+            const text = await globalThis.pywebview.api.get_clipboard_text();
+            if (typeof text === 'string') return text;
+        }
+    } catch (e) {}
+    try {
+        if (navigator.clipboard && globalThis.isSecureContext) {
+            return await navigator.clipboard.readText();
+        }
+    } catch (e) {}
+    return '';
+}
+
+function hideTerminalContextMenu() {
+    if (terminalContextMenuEl) {
+        terminalContextMenuEl.remove();
+        terminalContextMenuEl = null;
+    }
+}
+
+function bindTerminalShortcuts(term) {
+    const platformHint = navigator?.userAgentData?.platform || navigator?.userAgent || '';
+    const isMac = /Mac|iPhone|iPad|iPod/i.test(platformHint);
+    term.attachCustomKeyEventHandler((e) => {
+        // xterm 会在 keydown/keyup 等阶段多次触发该回调；仅在 keydown 处理，避免一次按键执行两次
+        if (e.type !== 'keydown') return true;
+        const mainMod = isMac ? e.metaKey : e.ctrlKey;
+        if (!mainMod || e.altKey) return true;
+
+        // 终端复制：Ctrl/Cmd + Shift + C（避免抢占 Ctrl+C 中断信号）
+        if (e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+            e.preventDefault();
+            const selected = term.getSelection();
+            if (!selected) {
+                notify('当前无选中文本', 'warning');
+                return false;
+            }
+            copyTextToClipboard(selected).then(ok => {
+                notify(ok ? '已复制终端选中文本' : '复制失败，请检查系统剪贴板权限', ok ? 'success' : 'error');
+            });
+            return false;
+        }
+
+        // 终端粘贴：Ctrl/Cmd + Shift + V
+        if (e.shiftKey && (e.key === 'V' || e.key === 'v')) {
+            e.preventDefault();
+            readTextFromClipboard().then(text => {
+                if (!text) {
+                    notify('剪贴板为空或无读取权限', 'warning');
+                    return;
+                }
+                term.focus();
+                term.paste(text);
+            });
+            return false;
+        }
+
+        return true;
+    });
+}
+
+function showTerminalContextMenu(tab, x, y) {
+    hideTerminalContextMenu();
+    const targetTabId = tab.id;
+
+    const menu = document.createElement('div');
+    menu.style.cssText = `
+        position: fixed;
+        left: ${x}px;
+        top: ${y}px;
+        min-width: 140px;
+        background: #252526;
+        border: 1px solid #3c3c3c;
+        border-radius: 6px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+        z-index: 10000;
+        padding: 4px 0;
+        color: #ddd;
+        font-size: 13px;
+    `;
+
+    const makeItem = (label, onClick) => {
+        const item = document.createElement('div');
+        item.textContent = label;
+        item.style.cssText = 'padding:8px 12px; cursor:pointer; user-select:none;';
+        item.onmouseenter = () => { item.style.background = '#3a3d41'; };
+        item.onmouseleave = () => { item.style.background = 'transparent'; };
+        item.onclick = () => {
+            onClick();
+            hideTerminalContextMenu();
+        };
+        return item;
+    };
+
+    menu.appendChild(makeItem('复制 (Ctrl+Shift+C)', async () => {
+        const target = getTabs().find(t => t.id === targetTabId);
+        const selected = target?.terminal?.getSelection?.() || '';
+        if (!selected) {
+            notify('当前无选中文本', 'warning');
+            return;
+        }
+        const ok = await copyTextToClipboard(selected);
+        notify(ok ? '已复制终端选中文本' : '复制失败，请检查系统剪贴板权限', ok ? 'success' : 'error');
+    }));
+
+    menu.appendChild(makeItem('粘贴 (Ctrl+Shift+V)', async () => {
+        const target = getTabs().find(t => t.id === targetTabId);
+        if (!target?.terminal) return;
+        const text = await readTextFromClipboard();
+        if (!text) {
+            notify('剪贴板为空或无读取权限', 'warning');
+            return;
+        }
+        target.terminal.focus();
+        target.terminal.paste(text);
+    }));
+
+    document.body.appendChild(menu);
+    terminalContextMenuEl = menu;
+}
+
+function bindTerminalContextMenu(tab, hostEl) {
+    hostEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showTerminalContextMenu(tab, e.clientX, e.clientY);
+    });
+}
 
 export function initTerminalModule() {
-    // 关闭标签页的函数需要通过 innerHTML onclick 调用，必须挂到 window
-    window.closeTab = closeTab;
+    // 关闭标签页的函数需要通过 innerHTML onclick 调用，必须挂到全局对象
+    globalThis.closeTab = closeTab;
+    document.addEventListener('click', hideTerminalContextMenu);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideTerminalContextMenu();
+    });
 }
 
 export function createTab(serverConfig) {
@@ -45,8 +198,14 @@ export function createTab(serverConfig) {
     switchTab(tabId);
     connectTerminal(tab);
     
-    // 保存到连接历史
-    saveToHistory(serverConfig);
+    // 记录最近连接（数据库持久化）
+    if (serverConfig?.id) {
+        api.markServerConnected(serverConfig.id)
+            .then(() => globalThis.loadConnectionHistory?.())
+            .catch(err => {
+                console.warn('记录最近连接失败:', err);
+            });
+    }
     return tab;
 }
 
@@ -104,7 +263,7 @@ export function switchTab(tabId) {
     }
 
     // 触发全局事件，让其他模块（AI、SFTP）同步
-    window.dispatchEvent(new CustomEvent('tabSwitched', { detail: { tab } }));
+    globalThis.dispatchEvent(new CustomEvent('tabSwitched', { detail: { tab } }));
 }
 
 export function closeTab(tabId) {
@@ -129,7 +288,7 @@ export function closeTab(tabId) {
             store.setState('activeTabId', null);
             document.getElementById('quick-connect-page').classList.add('active');
             // 通知其他模块：所有连接已关闭，清空相关面板
-            window.dispatchEvent(new CustomEvent('allTabsClosed'));
+            globalThis.dispatchEvent(new CustomEvent('allTabsClosed'));
         }
     }
 }
@@ -144,8 +303,11 @@ function connectTerminal(tab) {
     
     const fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
-    term.open(document.getElementById(`xterm-${tab.id}`));
+    const hostEl = document.getElementById(`xterm-${tab.id}`);
+    term.open(hostEl);
     fitAddon.fit();
+    bindTerminalShortcuts(term);
+    bindTerminalContextMenu(tab, hostEl);
 
     tab.terminal = term;
     tab.fitAddon = fitAddon;
@@ -158,10 +320,10 @@ function connectTerminal(tab) {
             return;
         }
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const protocol = globalThis.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const token = localStorage.getItem('xterm_token');
         // 后端路由是 /ws/ssh/{server_id}，使用 server_id 作为路径参数，并带上鉴权 token
-        const wsUrl = `${protocol}//${window.location.host}/ws/ssh/${tab.config.id}${token ? '?token=' + token : ''}`;
+        const wsUrl = `${protocol}//${globalThis.location.host}/ws/ssh/${tab.config.id}${token ? '?token=' + token : ''}`;
 
         console.log(`🔌 正在发起 SSH WebSocket 连接: ${tab.config.host} (${wsUrl})`);
         const socket = new WebSocket(wsUrl);
@@ -202,7 +364,7 @@ function connectTerminal(tab) {
                     const output = tab.captureBuffer.trim();
                     tab.captureBuffer = '';
                     if (output) {
-                        window.dispatchEvent(new CustomEvent('captureReady', {
+                        globalThis.dispatchEvent(new CustomEvent('captureReady', {
                             detail: { tabId: tab.id, output }
                         }));
                     }
@@ -259,10 +421,3 @@ export function refreshActiveTerminal() {
     }
 }
 
-// 辅助：连接历史
-function saveToHistory(server) {
-    let history = storage.get('connection_history', []);
-    history = history.filter(item => item.host !== server.host);
-    history.unshift({ ...server, time: Date.now() });
-    storage.set('connection_history', history.slice(0, 20));
-}

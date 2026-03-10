@@ -13,9 +13,9 @@ import { store } from './modules/store.js';
 import './modules/components.js';
 
 // 全局变量维护
-window.getTab = (id) => (store ? store.getState('tabs') : []).find(t => t.id === id);
-window.showModal = showModal;
-window.closeModal = closeModal;
+globalThis.getTab = (id) => (store ? store.getState('tabs') : []).find(t => t.id === id);
+globalThis.showModal = showModal;
+globalThis.closeModal = closeModal;
 
 // 1. 初始化
 async function init() {
@@ -36,7 +36,7 @@ async function init() {
     const token = localStorage.getItem('xterm_token');
     // 先绑定登录表单和 authError 监听，否则未登录时点击登录会走默认表单提交导致整页刷新
     setupLoginForm();
-    window.addEventListener('authError', () => {
+    globalThis.addEventListener('authError', () => {
         localStorage.removeItem('xterm_token');
         showModal('login-modal');
     });
@@ -73,8 +73,8 @@ function setupLoginForm() {
 
 async function startApp() {
     // 防止重复初始化
-    if (window.isAppStarted) return;
-    window.isAppStarted = true;
+    if (globalThis.isAppStarted) return;
+    globalThis.isAppStarted = true;
 
     terminal.initTerminalModule();
     ai.initAIModule();
@@ -89,7 +89,7 @@ async function startApp() {
     initStatsTabs();
     initBottomPanel();
     
-    window.addEventListener('resize', () => terminal.fitActiveTerminal());
+    globalThis.addEventListener('resize', () => terminal.fitActiveTerminal());
     
     loadServers();
     loadConnectionHistory();
@@ -97,7 +97,7 @@ async function startApp() {
     loadDeviceTypes(); // 加载设备类型
 
     // 监听命令变更
-    window.addEventListener('commandsChanged', () => loadCommandGroups());
+    globalThis.addEventListener('commandsChanged', () => loadCommandGroups());
     
     console.log("✅ 初始化完成");
 }
@@ -134,9 +134,21 @@ async function loadCommands(groupId) {
         const commands = await api.getCommands(groupId);
         const container = document.getElementById('commands-grid');
         if (!container) return;
+
+        const encodeBase64Unicode = (text) => {
+            const bytes = new TextEncoder().encode(String(text ?? ''));
+            let binary = '';
+            for (const b of bytes) binary += String.fromCharCode(b);
+            return btoa(binary);
+        };
+        const decodeBase64Unicode = (base64Text) => {
+            const binary = atob(base64Text);
+            const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+            return new TextDecoder().decode(bytes);
+        };
         
         container.innerHTML = commands.map(cmd => `
-            <div class="command-tile" onclick="executeCommand('${btoa(unescape(encodeURIComponent(cmd.content)))}', ${cmd.auto_cr})">
+            <div class="command-tile" onclick="executeCommand('${encodeBase64Unicode(cmd.content)}', ${cmd.auto_cr})">
                 <div class="command-tile-name">${cmd.name}</div>
                 <div class="command-tile-content">${cmd.content.substring(0, 30)}${cmd.content.length > 30 ? '...' : ''}</div>
                 <div class="command-tile-actions">
@@ -146,15 +158,15 @@ async function loadCommands(groupId) {
             </div>
         `).join('');
         
-        window.executeCommand = (encodedContent, autoCr) => {
-            const content = decodeURIComponent(escape(atob(encodedContent)));
+        globalThis.executeCommand = (encodedContent, autoCr) => {
+            const content = decodeBase64Unicode(encodedContent);
             const activeId = store.getState('activeTabId');
-            const activeTab = window.getTab(activeId);
+            const activeTab = globalThis.getTab(activeId);
             if (!activeTab || !activeTab.socket) return notify("请先选择一个活跃的终端标签", "warning");
             activeTab.socket.send(JSON.stringify({ type: 'data', data: content + (autoCr ? '\n' : '') }));
         };
 
-        window.editCommand = (id) => {
+        globalThis.editCommand = (id) => {
             const cmd = commands.find(c => c.id === id);
             if (!cmd) return;
             document.getElementById('command-modal-title').innerText = '编辑快捷命令';
@@ -167,12 +179,12 @@ async function loadCommands(groupId) {
             showModal('command-modal');
         };
 
-        window.deleteCommand = async (id, name) => {
+        globalThis.deleteCommand = async (id, name) => {
             if (!confirm(`确定要删除命令「${name}」吗？`)) return;
             try {
                 await api.deleteCommand(id);
                 notify(`已删除命令「${name}」`, 'success');
-                window.dispatchEvent(new CustomEvent('commandsChanged'));
+                globalThis.dispatchEvent(new CustomEvent('commandsChanged'));
             } catch (err) { notify('删除失败: ' + err.message, 'error'); }
         };
     } catch (err) { console.error("加载命令列表失败", err); }
@@ -232,7 +244,7 @@ function initLayoutResizer() {
     sidebarResizer.onmousedown = (e) => { currentResizer = 'sidebar'; document.body.style.cursor = 'col-resize'; e.preventDefault(); };
     aiResizer.onmousedown = (e) => { currentResizer = 'ai'; document.body.style.cursor = 'col-resize'; e.preventDefault(); };
     bottomResizer.onmousedown = (e) => { currentResizer = 'bottom'; document.body.style.cursor = 'row-resize'; e.preventDefault(); };
-    window.onmousemove = (e) => {
+    globalThis.onmousemove = (e) => {
         if (!currentResizer) return;
         if (currentResizer === 'sidebar') {
             const newWidth = e.clientX;
@@ -240,18 +252,18 @@ function initLayoutResizer() {
                 document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
             }
         } else if (currentResizer === 'ai') {
-            const newWidth = window.innerWidth - e.clientX;
+            const newWidth = globalThis.innerWidth - e.clientX;
             if (newWidth > 0 && newWidth < 600) {
                 document.documentElement.style.setProperty('--ai-section-width', `${newWidth}px`);
             }
         } else if (currentResizer === 'bottom') {
-            const newHeight = window.innerHeight - e.clientY;
-            if (newHeight > 30 && newHeight < window.innerHeight * 0.8) bottomPanel.style.height = `${newHeight}px`;
+            const newHeight = globalThis.innerHeight - e.clientY;
+            if (newHeight > 30 && newHeight < globalThis.innerHeight * 0.8) bottomPanel.style.height = `${newHeight}px`;
         }
         // 等浏览器完成 CSS 布局重排后再 fit，避免读到旧尺寸
         requestAnimationFrame(() => terminal.fitActiveTerminal());
     };
-    window.onmouseup = () => {
+    globalThis.onmouseup = () => {
         if (currentResizer) {
             currentResizer = null;
             document.body.style.cursor = 'default';
@@ -329,7 +341,7 @@ function getServerIcon(deviceType) {
         default:        return 'fas fa-server';
     }
 }
-window.getServerIcon = getServerIcon;
+globalThis.getServerIcon = getServerIcon;
 
 async function loadServers() {
     try {
@@ -439,22 +451,22 @@ function connectToServer(server) {
     terminal.createTab(server);
 }
 
-window.toggleSidebar = () => {
+globalThis.toggleSidebar = () => {
     const sidebar = document.getElementById('sidebar');
     sidebar.classList.toggle('collapsed');
     setTimeout(() => terminal.fitActiveTerminal(), 300);
 };
 
 // 暴露全局加载函数，方便 settings.js 调用
-window.loadServers = loadServers;
-window.loadConnectionHistory = loadConnectionHistory;
-window.connectToServer = connectToServer;
+globalThis.loadServers = loadServers;
+globalThis.loadConnectionHistory = loadConnectionHistory;
+globalThis.connectToServer = connectToServer;
 
 // 动态加载设备类型到下拉框
 async function loadDeviceTypes() {
     try {
         const types = await api.getDeviceTypes();
-        window.allDeviceTypes = types; // 存入全局供 ai_chat 和各处使用
+        globalThis.allDeviceTypes = types; // 存入全局供 ai_chat 和各处使用
         
         // 1. 填充服务器编辑弹窗的下拉框
         const selects = document.querySelectorAll('select[name="device_type_id"]');
@@ -473,10 +485,10 @@ async function loadDeviceTypes() {
         }
     } catch (err) { console.error("加载设备类型失败", err); }
 }
-window.loadDeviceTypes = loadDeviceTypes;
+globalThis.loadDeviceTypes = loadDeviceTypes;
 
 // --- 系统类型管理逻辑 ---
-window.showDeviceTypeMgr = async () => {
+globalThis.showDeviceTypeMgr = async () => {
     showModal('device-type-mgr-modal');
     loadDeviceTypeList();
 };
@@ -486,7 +498,7 @@ async function loadDeviceTypeList() {
     if (!tbody) return;
     try {
         const types = await api.getDeviceTypes();
-        window.allDeviceTypes = types;
+        globalThis.allDeviceTypes = types;
         tbody.innerHTML = types.map(t => `
             <tr>
                 <td>${t.name}</td>
@@ -502,7 +514,7 @@ async function loadDeviceTypeList() {
     } catch (err) { notify('加载列表失败', 'error'); }
 }
 
-window.showAddDeviceType = async () => {
+globalThis.showAddDeviceType = async () => {
     document.getElementById('device-type-modal-title').innerText = '新增系统类型';
     const form = document.getElementById('device-type-form');
     form.reset();
@@ -511,8 +523,8 @@ window.showAddDeviceType = async () => {
     showModal('device-type-edit-modal');
 };
 
-window.showEditDeviceType = async (id) => {
-    const type = window.allDeviceTypes.find(t => t.id === id);
+globalThis.showEditDeviceType = async (id) => {
+    const type = globalThis.allDeviceTypes.find(t => t.id === id);
     if (!type) return;
     document.getElementById('device-type-modal-title').innerText = '编辑系统类型';
     const form = document.getElementById('device-type-form');
@@ -525,7 +537,7 @@ window.showEditDeviceType = async (id) => {
     showModal('device-type-edit-modal');
 };
 
-window.deleteDeviceType = async (id, name) => {
+globalThis.deleteDeviceType = async (id, name) => {
     if (!confirm(`确定要删除系统类型「${name}」吗？\n关联该类型的服务器将被设为“未知”。`)) return;
     try {
         await api.deleteDeviceType(id);
@@ -564,7 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-window.deleteServer = async (id, name) => {
+globalThis.deleteServer = async (id, name) => {
     if (!confirm(`确定要删除服务器「${name}」吗？`)) return;
     try {
         await api.deleteServer(id);
@@ -573,17 +585,17 @@ window.deleteServer = async (id, name) => {
     } catch (err) { notify('删除失败: ' + err.message, 'error'); }
 };
 
-window.clearServerStats = async (serverId, serverName) => {
+globalThis.clearServerStats = async (serverId, serverName) => {
     if (!confirm(`确定要清除服务器「${serverName}」的所有状态记录吗？`)) return;
     try {
         await api.clearServerStats(serverId);
         notify(`已清除「${serverName}」的状态记录`, 'success');
-        window.dispatchEvent(new CustomEvent('statsCleared', { detail: { serverId } }));
+        globalThis.dispatchEvent(new CustomEvent('statsCleared', { detail: { serverId } }));
     } catch (err) { notify('清除失败: ' + err.message, 'error'); }
 };
 
 // 监听服务器变更事件
-window.addEventListener('serversChanged', () => {
+globalThis.addEventListener('serversChanged', () => {
     loadServers();
 });
 
@@ -606,7 +618,10 @@ function getDeviceIconClass(deviceType) {
 }
 
 function formatRelativeTime(ts) {
-    const diff = Date.now() - ts;
+    if (!ts) return '-';
+    const t = (typeof ts === 'number') ? ts : new Date(ts).getTime();
+    if (!Number.isFinite(t)) return '-';
+    const diff = Date.now() - t;
     const min = Math.floor(diff / 60000);
     if (min < 1)  return '刚刚';
     if (min < 60) return `${min} 分钟前`;
@@ -617,10 +632,15 @@ function formatRelativeTime(ts) {
     return new Date(ts).toLocaleDateString();
 }
 
-function loadConnectionHistory() {
-    const history = storage.get('connection_history', []);
+async function loadConnectionHistory() {
     const container = document.getElementById('connection-history-list');
     if (!container) return;
+    let history = [];
+    try {
+        history = await api.getRecentConnections(20);
+    } catch (err) {
+        console.error('加载最近连接失败:', err);
+    }
     if (history.length === 0) {
         container.innerHTML = '<div class="empty-tip"><i class="fas fa-plug" style="display:block;font-size:2rem;margin-bottom:12px;color:#333;"></i>暂无最近连接记录</div>';
         return;
@@ -630,11 +650,13 @@ function loadConnectionHistory() {
     history.forEach(item => {
         const card = document.createElement('div');
         card.className = 'history-card';
-        const iconCls  = getDeviceIconClass(item.device_type);
-        const iconName = getDeviceIcon(item.device_type);
+        const dtype = item.device_type_value || item.device_type;
+        const iconCls  = getDeviceIconClass(dtype);
+        const iconName = getDeviceIcon(dtype);
         const groupHtml = item.group_name && item.group_name !== 'default'
             ? `<div class="history-card-group"><i class="fas fa-folder"></i>${item.group_name.replace(/\//g, ' › ')}</div>`
             : '';
+        const connectedAt = item.last_connected_at ? new Date(item.last_connected_at) : null;
         card.innerHTML = `
             <div class="history-card-header">
                 <div class="history-card-icon ${iconCls}"><i class="${iconName}"></i></div>
@@ -643,7 +665,7 @@ function loadConnectionHistory() {
             <div class="history-card-host">${item.host}${item.port && item.port !== 22 ? ':' + item.port : ''}</div>
             ${groupHtml}
             <div class="history-card-footer">
-                <span class="history-time" title="${new Date(item.time).toLocaleString()}">${formatRelativeTime(item.time)}</span>
+                <span class="history-time" title="${connectedAt ? connectedAt.toLocaleString() : '-'}">${formatRelativeTime(item.last_connected_at)}</span>
             </div>
         `;
         card.onclick = () => connectToServer(item);
@@ -651,10 +673,15 @@ function loadConnectionHistory() {
     });
 }
 
-window.clearConnectionHistory = function() {
+globalThis.clearConnectionHistory = async function() {
     if (!confirm('确定要清空所有最近连接记录吗？')) return;
-    storage.set('connection_history', []);
-    loadConnectionHistory();
+    try {
+        await api.clearRecentConnections();
+        notify('最近连接已清空', 'success');
+    } catch (err) {
+        notify('清空失败: ' + err.message, 'error');
+    }
+    await loadConnectionHistory();
 };
 
 // --- 系统设置辅助 ---
@@ -669,7 +696,7 @@ async function loadSystemSettings() {
 }
 
 // 暴露全局
-window.showQuickConnect = () => {
+globalThis.showQuickConnect = () => {
     document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('#terminal-stack > .view').forEach(el => el.classList.remove('active'));
     document.getElementById('quick-connect-page').classList.add('active');
