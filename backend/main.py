@@ -22,6 +22,13 @@ from core import APP_PASSWORD, FRONTEND_DIR, JWT_SECRET, STATIC_DIR
 from logger import app_logger
 from routers.ai import router as ai_router
 from routers.auth import router as auth_router
+from routers.evolution import (
+    router as evolution_router,
+    start_evolution_queue,
+    start_evolution_scheduler,
+    stop_evolution_queue,
+    stop_evolution_scheduler,
+)
 from routers.servers import router as servers_router
 from routers.sftp import router as sftp_router
 from routers.system import router as system_router
@@ -48,7 +55,27 @@ async def lifespan(app: FastAPI):
             pass
     except Exception:
         pass
+    try:
+        start_evolution_queue()
+        app_logger.info("系统", "Evolution 任务队列已启动")
+    except Exception as e:
+        app_logger.info("系统", f"Evolution 队列启动失败: {e}")
+    try:
+        start_evolution_scheduler()
+        app_logger.info("系统", "Evolution 调度器已启动")
+    except Exception as e:
+        app_logger.info("系统", f"Evolution 调度器启动失败: {e}")
     yield
+    try:
+        stop_evolution_queue()
+        app_logger.info("系统", "Evolution 任务队列已停止")
+    except Exception:
+        pass
+    try:
+        stop_evolution_scheduler()
+        app_logger.info("系统", "Evolution 调度器已停止")
+    except Exception:
+        pass
 
 
 app = FastAPI(lifespan=lifespan)
@@ -56,7 +83,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.middleware("http")
 async def log_api_requests(request: Request, call_next):
-    """记录关键请求：页面加载、所有 API，便于诊断前后端是否连通"""
+    """仅记录异常请求（>=400），减少正常请求噪音"""
     path = request.url.path
     is_api = path.startswith("/api/")
     is_page = path in ("/", "/frontend/index.html")
@@ -65,14 +92,12 @@ async def log_api_requests(request: Request, call_next):
     try:
         response = await call_next(request)
         try:
-            if is_api:
-                code = response.status_code
-                app_logger.info(
-                    "API",
-                    f"{request.method} {path}" + (f" -> {code}" if code >= 400 else ""),
-                )
-            else:
-                app_logger.info("系统", f"页面请求: {path} -> {response.status_code}")
+            code = response.status_code
+            if code >= 400:
+                if is_api:
+                    app_logger.warning("API", f"{request.method} {path} -> {code}")
+                else:
+                    app_logger.warning("系统", f"页面请求异常: {path} -> {code}")
         except Exception:
             pass
         return response
@@ -100,6 +125,7 @@ app.include_router(auth_router)
 app.include_router(system_router)
 app.include_router(servers_router)
 app.include_router(ai_router)
+app.include_router(evolution_router)
 app.include_router(sftp_router)
 app.include_router(ws_router)
 
@@ -109,4 +135,4 @@ if __name__ == "__main__":
 
     host = os.getenv("SERVER_HOST", "0.0.0.0")
     port = int(os.getenv("SERVER_PORT", 8000))
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(app, host=host, port=port, access_log=False)

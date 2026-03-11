@@ -135,6 +135,7 @@ class RoleModel(BaseModel):
     system_prompt: str
     ai_endpoint_id: Optional[int] = None
     is_active: int = 0
+    role_scope: str = "ops"
     bound_device_types: List[int] = []
 
 
@@ -238,6 +239,7 @@ class SkillModel(BaseModel):
     source_url: Optional[str] = None
     content: Optional[str] = None
     trigger_words: Optional[List[str]] = None
+    scope_tags: List[str] = ["ops"]
     is_enabled: int = 1
     install_count: int = 0
     bound_device_types: List[int] = []
@@ -248,6 +250,7 @@ class SkillInstallModel(BaseModel):
     skill_name: str
     skill_path: str = ".agent-skills"
     description_zh: Optional[str] = None
+    scope_tags: List[str] = ["ops"]
     bound_device_type_ids: List[int] = []
 
 

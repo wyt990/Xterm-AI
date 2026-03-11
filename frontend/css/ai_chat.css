@@ -29,7 +29,7 @@
     border-right: 1px solid #3c3c3c;
     cursor: pointer;
     flex-shrink: 0;
-    color: #666;
+    color: #aeb4bc;
     font-size: 10px;
     transition: background 0.2s, color 0.2s;
     z-index: 5;
@@ -37,7 +37,7 @@
 
 #ai-toggle-strip:hover {
     background: #3c3c3c;
-    color: #0078d4;
+    color: #66b5ff;
 }
 
 .ai-header {
@@ -108,6 +108,7 @@
     align-self: flex-end;
     background: #0078d4;
     color: white;
+    min-height: unset;
 }
 
 .message.ai {
@@ -199,8 +200,8 @@
 
 .ai-toolbar-btn:hover {
     border-color: #e05252;
-    color: #e05252;
-    background: rgba(224, 82, 82, 0.08);
+    color: #ff9f9f;
+    background: transparent;
 }
 
 #send-btn {
@@ -246,8 +247,8 @@
 }
 
 .command-card.dangerous .command-card-header {
-    background: #452121;
-    color: #ff4d4f;
+    background: #2b1112;
+    color: #ff8f91;
 }
 
 .command-card.dangerous .command-card-body {
@@ -260,7 +261,7 @@
     padding: 6px 10px;
     font-size: 0.85rem;
     font-weight: bold;
-    color: #0078d4;
+    color: #66b5ff;
     border-bottom: 1px solid #444;
     display: flex;
     align-items: center;
@@ -323,4 +324,422 @@
 
 .message-text-content th {
     background-color: #444;
+}
+
+/* 左侧 AI 对话独立页面 */
+.ai-dialog-shell {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #252526;
+    border: 1px solid #333;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.ai-dialog-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 12px;
+    height: 100%;
+}
+
+.ai-dialog-sidebar {
+    border: 1px solid #333;
+    border-radius: 10px;
+    background: #202124;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.ai-dialog-sidebar-header {
+    padding: 10px;
+    border-bottom: 1px solid #333;
+    background: #2a2b2d;
+}
+
+.ai-dialog-session-list {
+    overflow: auto;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ai-dialog-session-group-title {
+    font-size: 11px;
+    color: #8f9cac;
+    padding: 4px 4px 2px;
+}
+
+.ai-dialog-session-item {
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 8px;
+    cursor: pointer;
+    background: #252628;
+}
+
+.ai-dialog-session-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ai-dialog-session-ops {
+    display: flex;
+    gap: 4px;
+}
+
+.ai-dialog-session-item.active {
+    border-color: #0078d4;
+    background: rgba(0, 120, 212, 0.12);
+}
+
+.ai-dialog-session-title {
+    color: #ddd;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-dialog-session-time {
+    color: #8d939a;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.ai-dialog-toolbar {
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #3c3c3c;
+    background: #2d2d2d;
+}
+
+.ai-dialog-upload-list {
+    max-height: 112px;
+    overflow: auto;
+    border-bottom: 1px solid #333;
+    background: #242526;
+}
+
+.ai-upload-item {
+    display: grid;
+    grid-template-columns: 150px 1fr 45px;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px dashed #3b3b3b;
+}
+
+.ai-upload-name {
+    color: #ccc;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-upload-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: #3b3d40;
+    overflow: hidden;
+}
+
+.ai-upload-bar i {
+    display: block;
+    height: 100%;
+    background: #3aa0ff;
+    transition: width 0.2s ease;
+}
+
+.ai-upload-pct {
+    font-size: 11px;
+    color: #9aa0a6;
+    text-align: right;
+}
+
+#ai-dialog-voice-btn.active {
+    color: #fff;
+    background: #c62828;
+    border-color: #c62828;
+}
+
+.ai-dialog-batch-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #333;
+    background: #222629;
+}
+
+#ai-dialog-batch-count {
+    font-size: 12px;
+    color: #b4bfcc;
+    margin-right: 6px;
+}
+
+.ai-msg-check {
+    margin-right: 8px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.ai-msg-check input {
+    accent-color: #2f9cff;
+}
+
+.ai-message-actions {
+    margin-top: 8px;
+    display: none;
+    gap: 4px;
+}
+
+.message:hover .ai-message-actions {
+    display: flex;
+}
+
+.ai-mini-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    border: 1px solid #474747;
+    background: #2b2b2c;
+    color: #aeb4bc;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+}
+
+.ai-mini-btn:hover {
+    border-color: #66b5ff;
+    color: #cfe8ff;
+}
+
+.ai-rich-card {
+    border: 1px solid #3f3f43;
+    border-radius: 8px;
+    padding: 8px;
+    background: #26282b;
+}
+
+.ai-rich-card-title {
+    color: #d6dde6;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.ai-rich-card-body {
+    color: #c8cfd8;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.ai-rich-card-meta {
+    color: #8f9cac;
+    font-size: 11px;
+    margin-top: 6px;
+}
+
+.ai-command-card.dangerous {
+    border-color: #7b2f34;
+    background: #2e1f22;
+}
+
+.ai-command-card code {
+    color: #ffd5d7;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.ai-text-card {
+    border-left: 3px solid #3ea6ff;
+    background: rgba(62, 166, 255, 0.06);
+}
+
+.ai-text-card-body {
+    line-height: 1.6;
+    color: #dfe7f2;
+    white-space: normal;
+}
+
+.ai-text-card-body p {
+    margin: 0 0 8px 0;
+}
+
+.ai-text-card-body ul,
+.ai-text-card-body ol {
+    margin: 4px 0 8px 20px;
+}
+
+.ai-text-card-body code {
+    color: #9cdcfe;
+    background: rgba(23, 28, 36, 0.8);
+    border: 1px solid #2f3a4a;
+    border-radius: 4px;
+    padding: 0 4px;
+}
+
+#ai-dialog-send-btn {
+    height: 30px;
+    padding: 0 14px;
+    background: #0078d4;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.15s;
+    flex-shrink: 0;
+}
+
+#ai-dialog-send-btn:hover {
+    background: #006abc;
+}
+
+#ai-dialog-send-btn.processing {
+    background: #a80000;
+}
+
+.ai-dialog-role-manage-item {
+    padding: 8px 10px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    background: #1f2226;
+}
+
+.ai-dialog-role-manage-item .title {
+    color: #ddd;
+    font-size: 13px;
+}
+
+.ai-dialog-role-manage-item .meta {
+    color: #8d939a;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.ai-dialog-role-manage-item.active {
+    border-color: #0078d4;
+    background: #203346;
+}
+
+.ai-dialog-role-modal .ai-dialog-role-modal-content {
+    width: min(1100px, 94vw);
+    max-width: min(1100px, 94vw);
+}
+
+.ai-dialog-role-modal .ai-dialog-role-modal-body {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+}
+
+.ai-dialog-role-list-panel {
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 10px;
+    min-height: 460px;
+    max-height: 560px;
+    overflow: auto;
+    background: #202225;
+}
+
+.ai-dialog-role-form-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ai-dialog-role-form-panel .form-group {
+    margin-bottom: 0;
+}
+
+.ai-dialog-role-form-panel input,
+.ai-dialog-role-form-panel textarea {
+    background: #2d2f34;
+    border: 1px solid #3e434a;
+    color: #e6e9ee;
+    border-radius: 6px;
+}
+
+.ai-dialog-role-form-panel textarea {
+    min-height: 320px;
+    resize: vertical;
+}
+
+.ai-dialog-role-form-panel input:focus,
+.ai-dialog-role-form-panel textarea:focus {
+    border-color: #0e87ec;
+    box-shadow: 0 0 0 2px rgba(14, 135, 236, 0.18);
+}
+
+.ai-dialog-role-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.ai-dialog-role-close-icon {
+    color: #fff !important;
+}
+
+.ai-dialog-role-close-icon i {
+    font-size: 16px;
+}
+
+.ai-inline-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.ai-inline-action-btn {
+    background: #21415d;
+    color: #d8ecff;
+    border: 1px solid #2a557b;
+    border-radius: 6px;
+    padding: 3px 10px;
+    min-height: 24px;
+    width: auto;
+    height: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+    word-break: keep-all;
+    writing-mode: horizontal-tb;
+    cursor: pointer;
+}
+
+.ai-inline-action-btn:hover {
+    border-color: #4f88bd;
+    background: #2a4f71;
+    color: #eef7ff;
 }

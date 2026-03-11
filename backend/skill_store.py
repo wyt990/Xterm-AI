@@ -182,6 +182,7 @@ def install_skill(
     skill_name: str,
     skill_path: str,
     description_zh: Optional[str],
+    scope_tags: List[str],
     bound_device_type_ids: List[int],
     db,
     proxy: Optional[Dict] = None,
@@ -204,6 +205,7 @@ def install_skill(
             "source": "github",
             "source_url": source,
             "skill_path": skill_path,
+            "scope_tags": scope_tags or ["ops"],
             "is_enabled": 1,
         }
         db.update_skill(existing["id"], merged)
@@ -218,6 +220,7 @@ def install_skill(
         "source": "github",
         "source_url": source,
         "skill_path": skill_path,
+        "scope_tags": scope_tags or ["ops"],
         "is_enabled": 1,
     }
     skill_id = db.add_skill(skill_data)

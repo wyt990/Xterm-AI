@@ -592,3 +592,436 @@
     gap: 10px;
     margin-top: 10px;
 }
+
+/* ===== Evolution Task Center ===== */
+.evo-chip-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.evo-chip {
+    border: 1px solid #3a3a3a;
+    background: #252526;
+    color: #bbb;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.evo-chip:hover {
+    border-color: #0078d4;
+    color: #fff;
+}
+
+.evo-chip.active {
+    background: #0078d4;
+    border-color: #0078d4;
+    color: #fff;
+}
+
+.evo-status-badge {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 12px;
+    border: 1px solid transparent;
+}
+
+.evo-status-badge.status-low { background: rgba(16, 124, 16, 0.15); color: #7ad47a; border-color: rgba(16,124,16,0.4); }
+.evo-status-badge.status-medium { background: rgba(202, 80, 16, 0.2); color: #ffb380; border-color: rgba(202,80,16,0.45); }
+.evo-status-badge.status-high { background: rgba(196, 43, 28, 0.2); color: #ff8f8f; border-color: rgba(196,43,28,0.45); }
+.evo-status-badge.status-pending_approval { background: rgba(255, 171, 0, 0.2); color: #ffd36b; border-color: rgba(255,171,0,0.45); }
+.evo-status-badge.status-approved { background: rgba(0, 120, 212, 0.2); color: #86c4ff; border-color: rgba(0,120,212,0.45); }
+.evo-status-badge.status-running { background: rgba(0, 120, 212, 0.25); color: #6bc6ff; border-color: rgba(0,120,212,0.5); }
+.evo-status-badge.status-failed { background: rgba(196, 43, 28, 0.2); color: #ff8f8f; border-color: rgba(196,43,28,0.45); }
+.evo-status-badge.status-success { background: rgba(16, 124, 16, 0.2); color: #7ad47a; border-color: rgba(16,124,16,0.45); }
+.evo-status-badge.status-blocked_manual { background: rgba(134, 73, 173, 0.22); color: #d3a9ff; border-color: rgba(134,73,173,0.45); }
+.evo-status-badge.status-cancelled { background: rgba(120, 120, 120, 0.22); color: #c8c8c8; border-color: rgba(120,120,120,0.45); }
+.evo-status-badge.status-rejected { background: rgba(196, 43, 28, 0.2); color: #ff8f8f; border-color: rgba(196,43,28,0.45); }
+.evo-status-badge.status-none { background: rgba(120,120,120,0.2); color: #bbb; border-color: rgba(120,120,120,0.4); }
+
+/* ===== Evolution Center UI refresh ===== */
+#task-center-view .evo-header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* 任务中心内容可能超过一屏：启用页面级滚动，避免底部任务表不可达 */
+#task-center-view {
+    overflow-y: auto;
+}
+
+#task-center-view .settings-container {
+    overflow: visible;
+    flex: 0 0 auto;
+    min-height: auto;
+}
+
+#task-center-view .evo-center-layout {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+#task-center-view .evo-panel {
+    background: #252526;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 12px;
+}
+
+#task-center-view .evo-panel-title {
+    font-size: 14px;
+    color: #e4e4e4;
+    margin-right: 8px;
+}
+
+#task-center-view .evo-panel-subtitle {
+    margin: 0 0 10px;
+    color: #ddd;
+    font-size: 14px;
+}
+
+#task-center-view .evo-queue-panel {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+#task-center-view .evo-queue-status {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#task-center-view .evo-queue-status > span {
+    font-size: 12px;
+    color: #b8c1cc;
+    border: 1px solid #3b3f44;
+    border-radius: 999px;
+    padding: 3px 10px;
+    background: #202328;
+}
+
+#task-center-view .evo-scheduler-panel,
+#task-center-view .evo-tools-panel {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+#task-center-view .evo-inline-label {
+    font-size: 12px;
+    color: #b9c0c8;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#task-center-view .evo-inline-input {
+    width: 86px;
+    background: #1f2125;
+    color: #dfe6ef;
+    border: 1px solid #3b3f45;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+
+#task-center-view .evo-inline-status {
+    font-size: 12px;
+    color: #9ea9b7;
+}
+
+#task-center-view .evo-phase-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+#task-center-view .evo-scroll-list {
+    max-height: 190px;
+    overflow: auto;
+    font-size: 12px;
+    color: #c6ced8;
+}
+
+#task-center-view .evo-scroll-list-half {
+    max-height: 88px;
+    margin-bottom: 8px;
+}
+
+#task-center-view .evo-task-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(240px, 1fr));
+    gap: 10px;
+    background: #252526;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+}
+
+#task-center-view .evo-task-form input,
+#task-center-view .evo-task-form select {
+    min-height: 32px;
+    padding: 6px 10px;
+    background: #1f2125;
+    color: #e0e6ee;
+    border: 1px solid #3a3f46;
+    border-radius: 6px;
+}
+
+#task-center-view .evo-task-form-actions {
+    grid-column: 1 / -1;
+}
+
+#task-center-view .evo-task-table-wrap {
+    overflow: auto;
+    border: 1px solid #333;
+    border-radius: 10px;
+}
+
+#task-center-view .evo-task-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#task-center-view .evo-task-table thead {
+    background: #252526;
+}
+
+#task-center-view .evo-task-table th,
+#task-center-view .evo-task-table td {
+    padding: 10px;
+    text-align: left;
+    font-size: 12px;
+    border-bottom: 1px solid #31353b;
+}
+
+#task-center-view .evo-task-table tbody tr:hover {
+    background: #20242a;
+}
+
+@media (max-width: 1200px) {
+    #task-center-view .evo-phase-grid {
+        grid-template-columns: repeat(2, minmax(260px, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    #task-center-view .evo-phase-grid {
+        grid-template-columns: 1fr;
+    }
+
+    #task-center-view .evo-task-form {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ===== Plugin Center UI refresh ===== */
+#plugin-center-view .plugin-header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+#plugin-center-view .plugin-filter-input {
+    min-height: 32px;
+    padding: 6px 10px;
+    background: #1f2125;
+    color: #dfe6ef;
+    border: 1px solid #3b3f45;
+    border-radius: 6px;
+}
+
+#plugin-center-view .plugin-search-input {
+    min-width: 220px;
+}
+
+#plugin-center-view .plugin-center-layout {
+    padding: 18px;
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 14px;
+}
+
+#plugin-center-view .plugin-panel {
+    background: #252526;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 12px;
+}
+
+#plugin-center-view .plugin-panel-header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+#plugin-center-view .plugin-panel-header h3 {
+    margin: 0;
+    font-size: 14px;
+    color: #e6e6e6;
+}
+
+#plugin-center-view .plugin-panel-subtitle {
+    font-size: 12px;
+    color: #9ea7b3;
+}
+
+#plugin-center-view .plugin-table-wrap {
+    overflow: auto;
+    border: 1px solid #31353b;
+    border-radius: 8px;
+    background: #1f2125;
+}
+
+#plugin-center-view .plugin-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#plugin-center-view .plugin-table thead {
+    background: #2b2d31;
+}
+
+#plugin-center-view .plugin-table th,
+#plugin-center-view .plugin-table td {
+    padding: 10px;
+    text-align: left;
+    font-size: 12px;
+    border-bottom: 1px solid #2f3339;
+    vertical-align: top;
+}
+
+#plugin-center-view .plugin-table tbody tr:hover {
+    background: #23262c;
+}
+
+#plugin-center-view .plugin-table tbody tr.plugin-row-selected {
+    background: #243247;
+}
+
+#plugin-center-view .plugin-id-code {
+    color: #a8d3ff;
+}
+
+#plugin-center-view .plugin-action-group {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+#plugin-center-view .plugin-action-group .btn {
+    min-height: 26px;
+}
+
+#plugin-center-view .plugin-side-column {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#plugin-center-view .plugin-field-label {
+    display: block;
+    color: #a9b2bf;
+    font-size: 12px;
+    margin-bottom: 6px;
+}
+
+#plugin-center-view .plugin-json-input {
+    width: 100%;
+    background: #1e1e1e;
+    color: #ddd;
+    border: 1px solid #3a3f46;
+    border-radius: 6px;
+    padding: 8px;
+    font-family: Consolas, Monaco, monospace;
+    line-height: 1.4;
+}
+
+#plugin-center-view .plugin-json-input.invalid {
+    border-color: #d55353;
+    box-shadow: 0 0 0 1px rgba(213, 83, 83, 0.25);
+}
+
+#plugin-center-view .plugin-json-input-lg {
+    min-height: 150px;
+}
+
+#plugin-center-view .plugin-json-input-sm {
+    min-height: 88px;
+}
+
+#plugin-center-view .plugin-install-actions {
+    margin-top: 10px;
+}
+
+#plugin-center-view .plugin-json-error {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #e57373;
+}
+
+#plugin-center-view .plugin-detail-panel {
+    min-height: 220px;
+    color: #d7dde8;
+}
+
+#plugin-center-view .plugin-empty-tip {
+    color: #8a8a8a;
+    font-size: 12px;
+}
+
+#plugin-center-view .plugin-detail-kv {
+    display: grid;
+    grid-template-columns: 86px 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: start;
+}
+
+#plugin-center-view .plugin-detail-kv .key {
+    color: #98a5b6;
+    font-size: 12px;
+}
+
+#plugin-center-view .plugin-detail-kv .val {
+    color: #e4eaf3;
+    font-size: 12px;
+}
+
+#plugin-center-view .plugin-detail-title {
+    margin: 10px 0 6px;
+    font-size: 13px;
+    color: #d5deeb;
+}
+
+#plugin-center-view .plugin-detail-pre {
+    margin: 0;
+    max-height: 160px;
+    overflow: auto;
+    border: 1px solid #2f3339;
+    border-radius: 6px;
+    background: #1f2125;
+    padding: 8px;
+    color: #bdd8ff;
+    font-size: 12px;
+    white-space: pre-wrap;
+}
+
+@media (max-width: 1180px) {
+    #plugin-center-view .plugin-center-layout {
+        grid-template-columns: 1fr;
+    }
+}

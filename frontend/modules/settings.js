@@ -93,8 +93,8 @@ export function initSettingsModule() {
     globalThis.setActiveAI = async (id) => { await api.setActiveAI(id); loadAIEndpoints(); };
     globalThis.deleteAI = async (id) => { if(confirm('确定删除?')){ await api.deleteAIEndpoint(id); loadAIEndpoints(); }};
     globalThis.editRole = (id) => { /* 逻辑已在 loadRoles 中动态绑定 */ };
-    globalThis.setActiveRole = async (id) => { await api.setActiveRole(id); loadRoles(); };
-    globalThis.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id); loadRoles(); }};
+    globalThis.setActiveRole = async (id) => { await api.setActiveRole(id, { scope: 'ops' }); loadRoles(); };
+    globalThis.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id, { scope: 'ops' }); loadRoles(); }};
 }
 
 // --- 代理管理 ---
@@ -195,6 +195,8 @@ async function showAddSkillModal() {
     if (nameInput) nameInput.readOnly = false;
     const descZhInput = document.querySelector('#skill-form input[name="description_zh"]');
     if (descZhInput) descZhInput.value = '';
+    const scopeCheckboxes = document.querySelectorAll('#skill-form input[name="scope_tags"]');
+    scopeCheckboxes.forEach(cb => { cb.checked = cb.value === 'ops'; });
     await loadSkillDeviceTypeCheckboxes(null);
     showModal('skill-modal');
 }
@@ -252,6 +254,7 @@ export async function loadSkills() {
                 const t = globalThis.allDeviceTypes?.find(d => d.id === id);
                 return t ? t.name : '';
             }).filter(Boolean).join('、') || '未绑定';
+            const scopeLabels = (Array.isArray(s.scope_tags) ? s.scope_tags : ['ops']).join('、');
             const isRemote = (s.source || 'local') !== 'local';
             const skillDisplayNameLiteral = JSON.stringify(s.display_name || s.name);
             return `
@@ -264,6 +267,7 @@ export async function loadSkills() {
                     <small style="color:#888;">${s.name}</small>
                     <p style="margin: 8px 0 0;">${desc || '(无描述)'}${desc && desc.length >= 80 ? '...' : ''}</p>
                     <p style="margin: 8px 0 0; font-size: 11px; color: #666;">适用: ${typeLabels}</p>
+                    <p style="margin: 6px 0 0; font-size: 11px; color: #6f9dd1;">scope: ${scopeLabels}</p>
                 </div>
                 <div class="card-actions">
                     <button class="btn btn-sm btn-secondary" onclick="editSkill(${s.id})">编辑</button>
@@ -287,6 +291,10 @@ export async function loadSkills() {
             form.display_name.value = skill.display_name || '';
             form.description.value = skill.description || '';
             form.description_zh.value = skill.description_zh || '';
+            const checkedScopes = new Set(Array.isArray(skill.scope_tags) ? skill.scope_tags : ['ops']);
+            form.querySelectorAll('input[name="scope_tags"]').forEach((cb) => {
+                cb.checked = checkedScopes.has(cb.value);
+            });
             form.content.value = skill.content || '';
             form.is_enabled.checked = !!skill.is_enabled;
             await loadSkillDeviceTypeCheckboxes(skill.bound_device_type_ids || []);
@@ -450,40 +458,52 @@ async function loadSkillsFromRepo() {
 globalThis.loadSkillsFromRepo = loadSkillsFromRepo;
 globalThis.skillStoreSelectInstall = skillStoreSelectInstall;
 
-function skillStoreSelectInstall(ev, btn, skillData) {
-    let data = skillData;
-    if (!data) {
-        const card = btn.closest('.role-card');
-        if (!card) return;
-        if (card.dataset.skillSource !== undefined) {
-            const dv = card.dataset.skillDeviceValues || '';
-            const sp = card.dataset.skillPath;
-            data = {
-                source: card.dataset.skillSource || '',
-                name: card.dataset.skillName || '',
-                skill_path: (sp !== undefined && sp !== null ? sp : '.agent-skills'),
-                description: card.dataset.skillDescription || '',
-                description_zh: card.dataset.skillDescZh || '',
-                device_type_values: dv ? dv.split(',').filter(Boolean) : []
-            };
-        }
-    }
-    if (!data?.name) return;
-    skillStorePendingInstall = {
+function extractSkillDataFromCard(btn) {
+    const card = btn?.closest('.role-card');
+    if (card?.dataset?.skillSource === undefined) return null;
+    const dv = card.dataset.skillDeviceValues || '';
+    const sp = card.dataset.skillPath;
+    return {
+        source: card.dataset.skillSource || '',
+        name: card.dataset.skillName || '',
+        skill_path: (sp !== undefined && sp !== null ? sp : '.agent-skills'),
+        description: card.dataset.skillDescription || '',
+        description_zh: card.dataset.skillDescZh || '',
+        device_type_values: dv ? dv.split(',').filter(Boolean) : []
+    };
+}
+
+function normalizePendingInstallData(data) {
+    return {
         source: data.source || data.repo || '',
         skill_name: data.name,
         skill_path: data.skill_path ?? '.agent-skills',
         description_zh: data.description_zh || data.description || '',
         description: data.description || '',
+        scope_tags: Array.isArray(data.scope_tags) && data.scope_tags.length ? data.scope_tags : ['ops'],
         device_type_values: data.device_type_values || []
     };
+}
+
+function applySkillStoreInstallPanelState(pendingData) {
     document.getElementById('skill-store-install-panel').style.display = 'block';
     const descZhGroup = document.getElementById('skill-store-desc-zh-group');
     const descZhInput = document.getElementById('skill-store-desc-zh');
+    const scopeTags = new Set(pendingData.scope_tags || ['ops']);
+    document.querySelectorAll('.skill-store-scope-tag').forEach((cb) => {
+        cb.checked = scopeTags.has(cb.value);
+    });
     if (descZhGroup && descZhInput) {
-        descZhInput.value = skillStorePendingInstall.description_zh || '';
+        descZhInput.value = pendingData.description_zh || '';
         descZhGroup.style.display = 'block';
     }
+}
+
+function skillStoreSelectInstall(ev, btn, skillData) {
+    const data = skillData || extractSkillDataFromCard(btn);
+    if (!data?.name) return;
+    skillStorePendingInstall = normalizePendingInstallData(data);
+    applySkillStoreInstallPanelState(skillStorePendingInstall);
     loadSkillStoreDeviceTypes(skillStorePendingInstall.device_type_values);
 }
 
@@ -532,6 +552,9 @@ globalThis.skillStoreDoInstall = async function() {
     if (!skillStorePendingInstall) return;
     const descZhInput = document.getElementById('skill-store-desc-zh');
     const descZh = descZhInput?.value?.trim() || skillStorePendingInstall.description_zh || null;
+    const scopeTags = Array.from(document.querySelectorAll('.skill-store-scope-tag:checked'))
+        .map(cb => String(cb.value || '').trim().toLowerCase())
+        .filter(Boolean);
     const checked = Array.from(document.querySelectorAll('.skill-store-dt:checked')).map(c => Number.parseInt(c.value, 10));
     const btn = document.getElementById('skill-store-install-btn');
     setBtnLoading(btn, true);
@@ -541,6 +564,7 @@ globalThis.skillStoreDoInstall = async function() {
             skill_name: skillStorePendingInstall.skill_name,
             skill_path: skillStorePendingInstall.skill_path,
             description_zh: descZh,
+            scope_tags: scopeTags.length ? scopeTags : ['ops'],
             bound_device_type_ids: checked
         });
         notify('安装成功', 'success');
@@ -666,7 +690,7 @@ async function testAIFromModal(e) {
 // --- AI 角色操作 ---
 export async function loadRoles() {
     try {
-        const roles = await api.getRoles();
+        const roles = await api.getRoles({ scope: 'ops' });
         const container = document.getElementById('role-list-container');
         if (!container) return;
         
@@ -697,8 +721,8 @@ export async function loadRoles() {
             await loadRoleDeviceTypeCheckboxes(role.id);
             showModal('role-modal');
         };
-        globalThis.setActiveRole = async (id) => { await api.setActiveRole(id); loadRoles(); };
-        globalThis.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id); loadRoles(); }};
+        globalThis.setActiveRole = async (id) => { await api.setActiveRole(id, { scope: 'ops' }); loadRoles(); };
+        globalThis.deleteRole = async (id) => { if(confirm('确定删除?')){ await api.deleteRole(id, { scope: 'ops' }); loadRoles(); }};
     } catch (err) {
         console.error("加载角色失败", err);
         notify("加载角色失败", "error");
@@ -832,8 +856,8 @@ function initForms() {
             
             setBtnLoading(submitBtn, true);
             try {
-                if (id) await api.updateRole(id, data);
-                else await api.addRole(data);
+                if (id) await api.updateRole(id, data, { scope: 'ops' });
+                else await api.addRole(data, { scope: 'ops' });
                 closeModal('role-modal');
                 notify("保存角色成功", "success");
                 loadRoles();
@@ -923,12 +947,16 @@ function initForms() {
             const submitBtn = e.target.querySelector('button[type="submit"]');
             const id = document.getElementById('skill-id').value;
             const checkedTypes = Array.from(e.target.querySelectorAll('input[name="bound_device_types"]:checked')).map(cb => Number.parseInt(cb.value, 10));
+            const scopeTags = Array.from(e.target.querySelectorAll('input[name="scope_tags"]:checked'))
+                .map(cb => String(cb.value || '').trim().toLowerCase())
+                .filter(Boolean);
             const data = {
                 name: e.target.name.value,
                 display_name: e.target.display_name.value || null,
                 description: e.target.description.value || null,
                 description_zh: e.target.description_zh?.value || null,
                 content: e.target.content.value || null,
+                scope_tags: scopeTags.length ? scopeTags : ['ops'],
                 is_enabled: e.target.is_enabled.checked ? 1 : 0,
                 bound_device_types: checkedTypes
             };

@@ -1,6 +1,6 @@
 <!-- 弹窗：技能创建/编辑 -->
 <div id="skill-modal" class="modal">
-    <div class="modal-content" style="width: 640px;">
+    <div class="modal-content" style="width: 640px; max-height: 88vh; overflow-y: auto;">
         <div class="modal-header">
             <h3 id="skill-modal-title">创建技能</h3>
             <button type="button" class="close" onclick="closeModal('skill-modal')" aria-label="关闭">&times;</button>
@@ -29,6 +29,28 @@
                 <label for="skill-description-zh">中文描述（可选）</label>
                 <input id="skill-description-zh" type="text" name="description_zh" placeholder="如：分析应用日志，定位错误、性能问题...">
                 <small style="color: #888;">点击「翻译为中文」自动填充，或手动填写。离线/内网时请手动填写。</small>
+            </div>
+            <div class="form-group">
+                <div class="form-group-title">作用域标签（scope_tags）</div>
+                <div id="skill-scope-tags-list" style="display:flex; flex-wrap:wrap; gap:8px; padding:10px; background:#1e1e1e; border-radius:4px; border:1px solid #3c3c3c;">
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" name="scope_tags" value="ops" checked style="margin:0;">
+                        <span style="font-size:12px;">ops</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" name="scope_tags" value="task" style="margin:0;">
+                        <span style="font-size:12px;">task</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" name="scope_tags" value="plugin" style="margin:0;">
+                        <span style="font-size:12px;">plugin</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" name="scope_tags" value="evolution" style="margin:0;">
+                        <span style="font-size:12px;">evolution</span>
+                    </label>
+                </div>
+                <small style="color: #888;">默认勾选 ops。用于控制在哪些 AI 场景注入该技能。</small>
             </div>
             <div class="form-group" id="skill-device-type-group">
                 <div class="form-group-title">适用设备类型</div>
@@ -95,6 +117,28 @@
                     <input type="text" id="skill-store-desc-zh" placeholder="安装后可编辑补充" style="flex: 1; padding: 6px 10px;">
                     <button type="button" class="btn btn-sm btn-secondary" onclick="translateStoreSkillDescription()"><i class="fas fa-language"></i> 翻译</button>
                 </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 8px;">
+                <div class="form-group-title">作用域标签（scope_tags）</div>
+                <div id="skill-store-scope-tags-list" style="display:flex; flex-wrap:wrap; gap:8px;">
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" class="skill-store-scope-tag" value="ops" checked style="margin:0;">
+                        <span style="font-size:12px;">ops</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" class="skill-store-scope-tag" value="task" style="margin:0;">
+                        <span style="font-size:12px;">task</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" class="skill-store-scope-tag" value="plugin" style="margin:0;">
+                        <span style="font-size:12px;">plugin</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" class="skill-store-scope-tag" value="evolution" style="margin:0;">
+                        <span style="font-size:12px;">evolution</span>
+                    </label>
+                </div>
+                <small style="color:#888;">默认勾选 ops。用于控制在哪些 AI 场景注入该技能。</small>
             </div>
             <div class="form-group" style="margin-bottom: 8px;">
                 <div class="form-group-title">选择适用设备类型</div>

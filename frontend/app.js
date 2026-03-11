@@ -5,10 +5,13 @@ import { loadComponents, showModal, closeModal, storage, notify } from './module
 import { api } from './modules/api.js';
 import * as terminal from './modules/terminal.js';
 import * as ai from './modules/ai_chat.js';
+import * as aiDialogPage from './modules/ai_dialog_page.js';
 import * as sftp from './modules/sftp.js';
 import * as editor from './modules/editor.js';
 import * as stats from './modules/stats.js';
 import * as settings from './modules/settings.js';
+import * as evolutionCenter from './modules/evolution_center.js';
+import * as pluginCenter from './modules/plugin_center.js';
 import { store } from './modules/store.js';
 import './modules/components.js';
 
@@ -80,10 +83,13 @@ async function startApp() {
 
     terminal.initTerminalModule();
     ai.initAIModule();
+    aiDialogPage.initAIDialogPageModule();
     sftp.initSFTPModule();
     editor.initEditorModule();
     stats.initStatsModule();
     settings.initSettingsModule();
+    evolutionCenter.initEvolutionCenterModule();
+    pluginCenter.initPluginCenterModule();
     
     // 3. 绑定 UI 事件
     initNavigation();
@@ -218,6 +224,11 @@ function initNavigation() {
             loadSystemSettings();
             settings.loadProxies?.();
         },
+        'ai-dialog-view': () => {
+            aiDialogPage.loadAIDialogPage();
+        },
+        'task-center-view': () => evolutionCenter.loadEvolutionTasks(),
+        'plugin-center-view': () => pluginCenter.loadPlugins(),
     };
 
     const handleViewSwitch = (viewId) => {
@@ -491,7 +502,7 @@ async function loadDeviceTypes() {
         // 2. 填充系统类型管理中的角色下拉框 (如果是打开状态)
         const dtRoleSelect = document.getElementById('dt-role-select');
         if (dtRoleSelect) {
-            const roles = await api.getRoles();
+            const roles = await api.getRoles({ scope: 'ops' });
             dtRoleSelect.innerHTML = '<option value="">不绑定（使用系统激活角色）</option>' + 
                 roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
         }

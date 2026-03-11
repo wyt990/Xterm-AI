@@ -177,7 +177,7 @@ let defaultRoleId = null;
 // 加载角色列表并填充选择器
 async function loadRoles() {
     try {
-        const roles = await api.getRoles();
+        const roles = await api.getRoles({ scope: 'ops' });
         allRoles = roles;
         roleSelect.innerHTML = '';
         roles.forEach(r => {

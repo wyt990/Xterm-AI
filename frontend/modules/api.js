@@ -79,11 +79,34 @@ export const api = {
     testAI: (data) => request('/api/ai_endpoints/test', { method: 'POST', body: JSON.stringify(data) }),
 
     // AI 角色
-    getRoles: () => request('/api/roles'),
-    addRole: (data) => request('/api/roles', { method: 'POST', body: JSON.stringify(data) }),
-    updateRole: (id, data) => request(`/api/roles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    deleteRole: (id) => request(`/api/roles/${id}`, { method: 'DELETE' }),
-    setActiveRole: (id) => request(`/api/roles/${id}/activate`, { method: 'POST' }),
+    getRoles: (params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        return request(`/api/roles${qs ? '?' + qs : ''}`);
+    },
+    addRole: (data, params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        return request(`/api/roles${qs ? '?' + qs : ''}`, { method: 'POST', body: JSON.stringify(data) });
+    },
+    updateRole: (id, data, params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        return request(`/api/roles/${id}${qs ? '?' + qs : ''}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+    deleteRole: (id, params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        return request(`/api/roles/${id}${qs ? '?' + qs : ''}`, { method: 'DELETE' });
+    },
+    setActiveRole: (id, params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        return request(`/api/roles/${id}/activate${qs ? '?' + qs : ''}`, { method: 'POST' });
+    },
+    exportRoles: (params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        return request(`/api/roles/export${qs ? '?' + qs : ''}`);
+    },
+    importRoles: (data, params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        return request(`/api/roles/import${qs ? '?' + qs : ''}`, { method: 'POST', body: JSON.stringify(data) });
+    },
 
     // 命令片段
     getCommandGroups: () => request('/api/command_groups'),
@@ -158,6 +181,69 @@ export const api = {
         fd.append('pid', pid);
         return request(`/api/servers/${serverId}/process/kill`, { method: 'POST', body: fd, headers: { 'Content-Type': undefined } });
     },
+
+    // 自进化任务中心（Phase A）
+    getEvolutionTasks: (params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        return request(`/api/evolution/tasks${qs ? '?' + qs : ''}`);
+    },
+    getEvolutionTask: (id) => request(`/api/evolution/tasks/${id}`),
+    createEvolutionTask: (data) => request('/api/evolution/tasks', { method: 'POST', body: JSON.stringify(data) }),
+    updateEvolutionTask: (id, data) => request(`/api/evolution/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    cloneEvolutionTask: (id, data = {}) => request(`/api/evolution/tasks/${id}/clone`, { method: 'POST', body: JSON.stringify(data) }),
+    cancelEvolutionTask: (id) => request(`/api/evolution/tasks/${id}/cancel`, { method: 'POST' }),
+    enableEvolutionTask: (id) => request(`/api/evolution/tasks/${id}/enable`, { method: 'POST' }),
+    deleteEvolutionTask: (id) => request(`/api/evolution/tasks/${id}`, { method: 'DELETE' }),
+    approveEvolutionTask: (id) => request(`/api/evolution/tasks/${id}/approve`, { method: 'POST' }),
+    rejectEvolutionTask: (id, data = {}) => request(`/api/evolution/tasks/${id}/reject`, { method: 'POST', body: JSON.stringify(data) }),
+    runEvolutionTask: (id, data) => request(`/api/evolution/tasks/${id}/run`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    runEvolutionTaskAsync: (id) => request(`/api/evolution/tasks/${id}/run_async`, { method: 'POST' }),
+    enqueueEvolutionTask: (id) => request(`/api/evolution/tasks/${id}/enqueue`, { method: 'POST' }),
+    getEvolutionTaskRuns: (id, limit = 20, order = 'desc') => request(`/api/evolution/tasks/${id}/runs?limit=${limit}&order=${order}`),
+    executeEvolutionIntent: (data) => request('/api/evolution/intent/execute', { method: 'POST', body: JSON.stringify(data) }),
+    getEvolutionQueueStatus: () => request('/api/evolution/queue/status'),
+    getEvolutionSchedulerStatus: () => request('/api/evolution/scheduler/status'),
+    updateEvolutionSchedulerConfig: (data) => request('/api/evolution/scheduler/config', { method: 'POST', body: JSON.stringify(data) }),
+    runEvolutionSchedulerOnce: () => request('/api/evolution/scheduler/run_once', { method: 'POST' }),
+    getEvolutionExperiences: (limit = 50) => request(`/api/evolution/experiences?limit=${limit}`),
+    getEvolutionFailureReports: (limit = 50) => request(`/api/evolution/failure_reports?limit=${limit}`),
+    getEvolutionSchemaMigrations: (limit = 50) => request(`/api/evolution/schema_migrations?limit=${limit}`),
+    applyEvolutionSchemaMigration: (data) => request('/api/evolution/schema_migrations/apply', { method: 'POST', body: JSON.stringify(data) }),
+    getEvolutionOpsTemplates: () => request('/api/evolution/templates/ops'),
+    getEvolutionPlugins: (params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        return request(`/api/evolution/plugins${qs ? '?' + qs : ''}`);
+    },
+    getEvolutionPlugin: (pluginId) => request(`/api/evolution/plugins/${encodeURIComponent(pluginId)}`),
+    installEvolutionPlugin: (data) => request('/api/evolution/plugins/install', { method: 'POST', body: JSON.stringify(data) }),
+    enableEvolutionPlugin: (pluginId) => request(`/api/evolution/plugins/${encodeURIComponent(pluginId)}/enable`, { method: 'POST' }),
+    disableEvolutionPlugin: (pluginId) => request(`/api/evolution/plugins/${encodeURIComponent(pluginId)}/disable`, { method: 'POST' }),
+    uninstallEvolutionPlugin: (pluginId) => request(`/api/evolution/plugins/${encodeURIComponent(pluginId)}`, { method: 'DELETE' }),
+    submitEvolutionPluginTask: (pluginId, data) => request(`/api/evolution/plugins/${encodeURIComponent(pluginId)}/submit_task`, { method: 'POST', body: JSON.stringify(data) }),
+    initAIDialogUpload: (data) => request('/api/evolution/ai_uploads/init', { method: 'POST', body: JSON.stringify(data) }),
+    uploadAIDialogChunk: (uploadId, chunkIndex, blob, fileName = 'chunk.bin') => {
+        const fd = new FormData();
+        fd.append('chunk_index', String(chunkIndex));
+        fd.append('file', blob, fileName);
+        return request(`/api/evolution/ai_uploads/${encodeURIComponent(uploadId)}/chunk`, {
+            method: 'POST',
+            body: fd,
+            headers: { 'Content-Type': undefined }
+        });
+    },
+    getAIDialogUploadProgress: (uploadId) => request(`/api/evolution/ai_uploads/${encodeURIComponent(uploadId)}/progress`),
+    getAIDialogUploadChunks: (uploadId) => request(`/api/evolution/ai_uploads/${encodeURIComponent(uploadId)}/chunks`),
+    completeAIDialogUpload: (uploadId, sessionId) => {
+        const fd = new FormData();
+        fd.append('session_id', String(sessionId));
+        return request(`/api/evolution/ai_uploads/${encodeURIComponent(uploadId)}/complete`, {
+            method: 'POST',
+            body: fd,
+            headers: { 'Content-Type': undefined }
+        });
+    },
+    seedEvolutionDemo: (data = {}) => request('/api/evolution/demo/seed', { method: 'POST', body: JSON.stringify(data) }),
+    resetEvolutionDemo: (data = {}) => request('/api/evolution/demo/reset', { method: 'POST', body: JSON.stringify(data) }),
     
     // 暴露通用请求方法
     request

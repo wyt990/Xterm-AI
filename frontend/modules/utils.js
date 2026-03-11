@@ -15,7 +15,8 @@ export async function loadComponents() {
         'device_type_modals.html',
         'skill_modals.html',
         'proxy_modals.html',
-        'doc_modals.html'
+        'doc_modals.html',
+        'evolution_modals.html'
     ];
     
     const placeholder = document.getElementById('component-placeholder');

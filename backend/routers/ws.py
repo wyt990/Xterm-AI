@@ -12,6 +12,68 @@ from ssh_handler import SSHHandler
 
 
 router = APIRouter()
+EVOLUTION_DIALOG_DEFAULT_PROMPT = """
+你是“自进化控制平面助手”。
+
+目标：
+1) 帮助用户设计、执行和复盘系统自进化任务（前端、后端、插件、数据库、任务编排）。
+2) 以产品化思维给出可执行方案、风险、回滚与验收标准。
+3) 默认输出自然语言与结构化要点，不强制输出 JSON 指令格式。
+
+行为约束：
+- 不编造执行结果；不确定时明确说明并给出验证步骤。
+- 优先给出最小可行改动与安全建议（权限、审计、回滚、重试上限）。
+- 回答尽量简洁清晰，必要时给出分步清单。
+""".strip()
+EVOLUTION_DIALOG_OUTPUT_PROTOCOL = """
+[输出协议 - 必须遵守]
+你必须返回严格 JSON（不要输出任何额外文本、前后缀或 Markdown 代码块）。
+JSON 结构如下：
+{
+  "version": "v1",
+  "messages": [
+    {
+      "type": "text",
+      "text": "给用户的文本回复"
+    }
+  ]
+}
+
+允许的消息类型：
+1) text
+   - 必填: type, text
+2) task_card
+   - 必填: type, title
+   - 可选: task_id, description, status
+3) command_card
+   - 必填: type, command
+   - 可选: risk, note
+4) status_card
+   - 必填: type, title
+   - 可选: task_id, status, detail
+
+每条消息可选 actions 字段（数组），用于前端一键执行：
+actions: [
+  {
+    "type": "create_task | open_task_detail | run_task_async",
+    "label": "按钮文案",
+    "task_id": 123,
+    "payload": { "title": "...", "description": "...", "task_type": "fix", "scope": "backend" }
+  }
+]
+说明：
+- create_task: 需要 payload，前端会创建任务并自动跳转任务中心详情。
+- open_task_detail: 需要 task_id（可省略并回退当前消息 task_id）。
+- run_task_async: 需要 task_id（可省略并回退当前消息 task_id）。
+
+要求：
+- messages 必须是数组，至少 1 条。
+- 不确定是否需要卡片时，至少输出一条 text。
+- 优先使用结构化卡片：task_card/status_card/command_card；text 用于补充说明。
+- text 建议简短（单条不超过 280 字）；多步骤请拆成多条 messages。
+- 若有明确下一步动作，优先通过 actions 提供可点击操作。
+- 禁止输出不可解析内容。
+""".strip()
 
 
 def _ssh_auth_label(cfg: dict) -> str:
@@ -195,14 +257,29 @@ def _build_command_protocol() -> str:
 """
 
 
-def _build_skills_block(dt_lower: str) -> str:
+def _build_skills_block(dt_lower: str, profile: str = "ops") -> str:
     max_skill_content = 3000
     max_total_skills = 8000
     try:
         settings = db.get_system_settings()
         if settings.get("skills_enabled", "1") == "0":
             return ""
-        skills_list = db.get_skills_for_device_type(dt_lower, enabled_only=True)
+        scope = "ops" if profile == "ops" else "evolution"
+        filter_mode = settings.get("skills_scope_filter_mode", "soft")
+        if scope == "ops":
+            skills_list = db.get_skills_for_scope(
+                scope="ops",
+                device_type_value=dt_lower,
+                enabled_only=True,
+                filter_mode="off",
+            )
+        else:
+            skills_list = db.get_skills_for_scope(
+                scope=scope,
+                device_type_value=dt_lower,
+                enabled_only=True,
+                filter_mode=filter_mode,
+            )
         if not skills_list:
             return ""
 
@@ -291,10 +368,22 @@ def _build_ai_handler(role_info: dict, combined_prompt: str):
 
 def _parse_mode_and_messages(payload):
     if isinstance(payload, list):
-        return "agent", payload
+        return "agent", payload, {}
     if isinstance(payload, dict):
-        return payload.get("mode", "agent"), payload.get("messages", [])
-    return None, None
+        return payload.get("mode", "agent"), payload.get("messages", []), payload
+    return None, None, {}
+
+
+async def _parse_ws_ai_payload(websocket: WebSocket, data: str):
+    payload = json.loads(data)
+    mode, messages, meta = _parse_mode_and_messages(payload)
+    if mode is None:
+        app_logger.error("AI 错误", f"无效的消息格式: {type(payload)}")
+        await websocket.send_text("[AI Error: 无效的消息格式]")
+        return None
+    if not messages:
+        return None
+    return mode, messages, meta
 
 
 async def _run_ai_loop(
@@ -304,19 +393,24 @@ async def _run_ai_loop(
     server_doc_block: str,
     skills_block: str,
     command_protocol: str,
+    profile: str,
 ):
     combined_prompt = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}{command_protocol}"
-    while True:
-        data = await websocket.receive_text()
-        payload = json.loads(data)
-        mode, messages = _parse_mode_and_messages(payload)
-        if mode is None:
-            app_logger.error("AI 错误", f"无效的消息格式: {type(payload)}")
-            await websocket.send_text("[AI Error: 无效的消息格式]")
-            continue
-        if not messages:
-            continue
 
+    def _build_runtime_ai(mode: str, meta: dict):
+        if profile == "evolution_dialog":
+            dialog_prompt = str(meta.get("dialog_system_prompt") or "").strip() or EVOLUTION_DIALOG_DEFAULT_PROMPT
+            runtime_prompt = (
+                f"{dialog_prompt}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}{EVOLUTION_DIALOG_OUTPUT_PROTOCOL}"
+            )
+            evo_role = {"system_prompt": dialog_prompt, "ai_endpoint_id": None}
+            ai = _build_ai_handler(evo_role, runtime_prompt)
+            ai.system_prompt = (
+                runtime_prompt
+                if mode == "agent"
+                else runtime_prompt + "\n(注意：当前处于 Ask 模式。)"
+            )
+            return ai
         ai = _build_ai_handler(role_info, combined_prompt)
         base = f"{role_info['system_prompt']}\n\n{env_constraints}\n\n{server_doc_block}{skills_block}"
         ai.system_prompt = (
@@ -324,6 +418,16 @@ async def _run_ai_loop(
             if mode == "agent"
             else base + "\n(注意：当前处于 Ask 模式，请仅通过文本回答，不要要求执行任何 Shell 命令。)"
         )
+        return ai
+
+    while True:
+        data = await websocket.receive_text()
+        parsed = await _parse_ws_ai_payload(websocket, data)
+        if not parsed:
+            continue
+        mode, messages, meta = parsed
+
+        ai = _build_runtime_ai(mode, meta)
 
         full_response = ""
         async for chunk in ai.get_response_stream(messages):
@@ -340,6 +444,7 @@ async def ai_endpoint(
     device_type: str = "unknown",
     server_name: str = "未选定服务器",
     server_id: Optional[int] = None,
+    profile: str = "ops",
 ):
     if not verify_ws_token(websocket):
         await websocket.accept()
@@ -349,10 +454,10 @@ async def ai_endpoint(
     role_info = _resolve_role_info(role_id)
     env_constraints, dt_lower = _build_env_constraints(device_type, server_name)
     command_protocol = _build_command_protocol()
-    skills_block = _build_skills_block(dt_lower)
+    skills_block = _build_skills_block(dt_lower, profile)
     server_doc_block = _build_server_doc_block(server_id)
     try:
-        await _run_ai_loop(websocket, role_info, env_constraints, server_doc_block, skills_block, command_protocol)
+        await _run_ai_loop(websocket, role_info, env_constraints, server_doc_block, skills_block, command_protocol, profile)
     except WebSocketDisconnect:
         pass
     except Exception as e:
