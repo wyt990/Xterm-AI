@@ -1,0 +1,137 @@
+/**
+ * 响应式设计 - 适配不同屏幕尺寸
+ * - 1024px: AI 面板抽屉/浮窗模式
+ * - 768px: 侧边栏自动折叠，布局优化
+ */
+
+/* ========== 1024px 以下：AI 面板抽屉模式 ========== */
+@media (max-width: 1024px) {
+    /* AI 面板默认折叠，展开时为浮窗覆盖 */
+    .ai-section {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(380px, 85vw) !important;
+        z-index: 1000;
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+        transform: translateX(100%);
+        transition: transform 0.25s ease, width 0.2s ease;
+    }
+
+    .ai-section:not(.collapsed) {
+        transform: translateX(0);
+    }
+
+    .ai-section.collapsed {
+        width: 0 !important;
+        transform: translateX(100%);
+    }
+
+    /* AI 展开时，主内容区可被部分遮蔽 */
+    .app-container .terminal-section {
+        margin-right: 0;
+    }
+
+    /* 抽屉模式下隐藏 AI resizer，避免误拖 */
+    #ai-resizer {
+        display: none;
+    }
+
+    /* 窄屏下放松 min-width，避免水平滚动 */
+    .content {
+        min-width: 0;
+    }
+
+    .terminal-section {
+        min-width: 240px;
+    }
+}
+
+/* ========== 768px 以下：移动端/平板布局 ========== */
+@media (max-width: 768px) {
+    /* 侧边栏自动进入折叠状态（仅图标） */
+    .sidebar {
+        width: var(--sidebar-width-collapsed) !important;
+    }
+
+    .sidebar .nav-brand span,
+    .sidebar .nav-item span {
+        display: none;
+    }
+
+    .sidebar .nav-brand {
+        padding: 15px 5px;
+        justify-content: center;
+    }
+
+    .sidebar .nav-item {
+        justify-content: center;
+        padding: 12px 10px;
+    }
+
+    /* 隐藏侧边栏拖拽 resizer，窄屏下不需要 */
+    #sidebar-resizer {
+        display: none;
+    }
+
+    /* 主内容区充分利用空间 */
+    .content {
+        min-width: 0;
+    }
+
+    .terminal-section {
+        min-width: 200px;
+    }
+
+    /* 服务器/角色卡片单列显示 */
+    .server-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .history-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .role-grid,
+    .ai-list {
+        grid-template-columns: 1fr;
+    }
+
+    /* view-header 紧凑 */
+    .view-header {
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px 16px;
+    }
+
+    .view-header h2 {
+        font-size: 1rem;
+    }
+
+    /* AI 浮窗略窄 */
+    .ai-section:not(.collapsed) {
+        width: min(320px, 95vw) !important;
+    }
+
+    /* 底部面板默认折叠以节省空间 */
+    .bottom-panel {
+        max-height: 40vh;
+    }
+}
+
+/* ========== 480px 以下：极小屏 ========== */
+@media (max-width: 480px) {
+    .quick-connect-container {
+        padding: 16px;
+    }
+
+    .history-card,
+    .server-card {
+        padding: 10px 12px;
+    }
+
+    .ai-section:not(.collapsed) {
+        width: 100vw !important;
+    }
+}

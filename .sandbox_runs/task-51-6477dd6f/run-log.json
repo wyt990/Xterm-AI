@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "task_status": "success",
+  "sandbox_path": "D:\\AI\\xterm\\.sandbox_runs\\task-51-6477dd6f",
+  "logs": [
+    {
+      "stage": "commands",
+      "command": "python -c \"import os; [open(p,'w',encoding='utf-8').write(open(p,encoding='utf-8').read().replace('AI助手（控制平面入口）','AI对话（控制平面入口）')) for r,d,fs in os.walk('frontend') for f in fs if f.endswith(('.ts','.tsx','.js','.jsx','.vue')) for p in [os.path.join(r,f)]]\"",
+      "exit_code": 0,
+      "ok": true,
+      "stdout": "",
+      "stderr": "",
+      "elapsed_ms": 187
+    },
+    {
+      "stage": "verify",
+      "command": "python -c \"import os; exit(1) if any('AI助手（控制平面入口）' in open(p,encoding='utf-8').read() for r,d,fs in os.walk('frontend') for f in fs if f.endswith(('.ts','.tsx','.js','.jsx','.vue')) for p in [os.path.join(r,f)]) else exit(0)\"",
+      "exit_code": 0,
+      "ok": true,
+      "stdout": "",
+      "stderr": "",
+      "elapsed_ms": 101
+    },
+    {
+      "stage": "sync_to_repo",
+      "command": "sandbox->repo",
+      "ok": true,
+      "exit_code": 0,
+      "stdout": "changed_files=0",
+      "stderr": "",
+      "elapsed_ms": 0
+    }
+  ],
+  "error_signature": null,
+  "changed_files": [],
+  "migration": {
+    "enabled": false
+  }
+}

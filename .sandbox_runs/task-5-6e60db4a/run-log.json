@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "task_status": "success",
+  "sandbox_path": "D:\\AI\\xterm\\.sandbox_runs\\task-5-6e60db4a",
+  "logs": [
+    {
+      "stage": "commands",
+      "command": "python -c \"print('ok')\"",
+      "exit_code": 0,
+      "ok": true,
+      "stdout": "ok\n",
+      "stderr": "",
+      "elapsed_ms": 238
+    },
+    {
+      "stage": "verify",
+      "command": "python -c \"print('verify')\"",
+      "exit_code": 0,
+      "ok": true,
+      "stdout": "verify\n",
+      "stderr": "",
+      "elapsed_ms": 116
+    },
+    {
+      "stage": "sync_to_repo",
+      "command": "sandbox->repo",
+      "ok": true,
+      "exit_code": 0,
+      "stdout": "changed_files=0",
+      "stderr": "",
+      "elapsed_ms": 0
+    }
+  ],
+  "error_signature": null,
+  "changed_files": [],
+  "migration": {
+    "enabled": false
+  }
+}

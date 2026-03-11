@@ -1,0 +1,465 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-browser": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "ba829d608ffa4c3afbbaac3cd0e1c8fdf1603d7f76dbac295add9d4d5cf03b9f"
+    },
+    "agent-configuration": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "696c06a1e5fe5ec50e109939508900d4428c552ac6756adcd7ae1bd3f86cfe9a"
+    },
+    "agent-evaluation": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "63d7beedb4b1893cf2a0c91a8ad960609c680de2a73d8ec08c4b405b33fcf6db"
+    },
+    "agentation": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "51907d1dde6d6e6e308133e519178c11686ed7d969a5656b74cec778c370d571"
+    },
+    "agentic-development-principles": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "6c4db2e4afdee832cef22bc60bb0295bf32f146cd6f244aac2d62802ae027ad4"
+    },
+    "agentic-principles": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "c97361cacbd4b016c5cf5b519daa5942da252801d380c489fe01fc5d90584112"
+    },
+    "agentic-workflow": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "9fe921b700422a19f55e08b2e62b58cddbcf661ac6ce571d5cd0f2ba66624bc2"
+    },
+    "ai-tool-compliance": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "a1d35238b7629a4f217a201a254f0830941627a86d130ba4e59c331d1b6fefd1"
+    },
+    "algorithmic-art": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "5c2804e8f0d4944c7ce6939a2e4afdcf0cb69c966a505481ed8b96e20bb32eee"
+    },
+    "api-design": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "dafbff951f8f1c29336fe9f6cd1e1f2ad9f203b36fcdc8b5a0c1c9cea500e6d5"
+    },
+    "api-documentation": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "86d8cdccfa06ea74f58cdad613e6357519f3f507c8a9b7f26d7f83f623a6c397"
+    },
+    "authentication-setup": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "0dc447f5aa70f61950d09db9730de9822aef4ee588fdf70ca644b4555c0ee76f"
+    },
+    "backend-testing": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "5f57cdd9cbd738d51975fe54f51867c341b5d009b58cdbf7c3b47327250519e8"
+    },
+    "bmad-gds": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "df13e5badc1cfaffdcba68d9eb59c2424acaa7954ea55ea83e9f0108881d156b"
+    },
+    "bmad-idea": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "362e1355237e3dcc650f31a81b967fd4dd24818d1083ed59d89d5c369f178d35"
+    },
+    "bmad-orchestrator": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "f127d362f1ead0e2c74d65a470ae9e2ab3a001e8a55815f951202619d046c99f"
+    },
+    "brand-guidelines": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "4aa754f4f7fc54ac3e7f6e2fb55c0e2fb14b7d70da077b41a86bd1889ff9094c"
+    },
+    "canvas-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "a2fe47d24b3fd8e52faef731fff099c557e698083cd644b2e5695cc4dd8c7715"
+    },
+    "changelog-maintenance": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "220ffb6f98cfc89329236e560e8f128d2439a95a371304cc2fae07772380ec24"
+    },
+    "claude-api": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "ae0442705d2ce9338f91fffafa423172abfa85c7c9b85f13dece6cdc9b1681cc"
+    },
+    "code-refactoring": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "ee4db552d0f5d12ef394959761d239a9a7731d245b8b7177a57c25130b81508b"
+    },
+    "code-review": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "ac61353e7ec0c8b98660accf0c9688bf5183044b7fa1ee1e189c680ff1a083c6"
+    },
+    "codebase-search": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "e0c9dd7e2f99574d78109db2bad6475801b4748e2f91a8fce7e736f5efa15923"
+    },
+    "copilot-coding-agent": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "af6d24d4150f62f79fac50d0d9dc962cd04268830d22ad1bef984d63c69a3b8a"
+    },
+    "data-analysis": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "1a0c36b3842ddc1fe8b1586b8b4b4009fdaa1cea70a66908502e765618242480"
+    },
+    "database-schema-design": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "8634e3e869a794fccecdc3220a0ea642ac16ecdda85c35b3f75bd104bc7e4425"
+    },
+    "debugging": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "8fe16be685f8d27839ed2c0607f612e066d24ad04e1cd65e52b3deeba5426837"
+    },
+    "deployment-automation": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "6e2023905a27da52839330b7e486eceebe993fa711db796168a7f97ded8200f2"
+    },
+    "design-system": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "f90bfd5467b9601e6a368476c6d68473ee95333254ebb2274731273281429526"
+    },
+    "doc-coauthoring": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "b964e4c3ffe13f66f76dd7919073e60c7aec622cd8a8363bb36323188100cf8e"
+    },
+    "docx": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "6962db07127ee540a56e4677f65576d0727668a1d67f7da8bc978f10791c2bfe"
+    },
+    "environment-setup": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "f948d84649bbbc7bf892354609d7185a71339bd7545cafe0af25cce0329ab124"
+    },
+    "file-organization": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "fe4dab650b60889bac5c90d41972b44fcd1bef1bfeae8dbce23c9919568122b6"
+    },
+    "firebase-ai-logic": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "557190804ab3f01b094d41291be8b552b4da74f2e80fe70e38937116ba69401f"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+    },
+    "genkit": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "376cc0b642901c3497fb4f9eb5b90c1d6f0e22176c77637e240f84941f8b3da3"
+    },
+    "git-submodule": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "91a22b62aec5da93a4721f43ec6f759ebbc5951848ee98ab2d8a97349674a2f6"
+    },
+    "git-workflow": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "a8f2d356cee50a0c64eeded9762de58d5227ba3a47b91cdd9889ba84dff9d020"
+    },
+    "image-generation": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "00e04817a015553878a6d760e59feb36993c1d52b3989b51884d5265d21c106a"
+    },
+    "internal-comms": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "b36b333bee983462008af46d74689ae5832c2f79ae5f2c18680ee82f6e6bef56"
+    },
+    "jeo": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "f062c4246b153c3cb94565f7ad68dcb00d0100d25bb755d923561c61ce89c54e"
+    },
+    "llm-monitoring-dashboard": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "450f2715979eedf8dd0094c8c0c386b39aa97376e8337b5c461a3dd4e8124990"
+    },
+    "log-analysis": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "ffe393613c9e3d99e0d68171c247881d6c00fe2ab030e8bb4be8c1dfd651ea80"
+    },
+    "looker-studio-bigquery": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "603da61d53a5fe8d490c9e4cc84430699c610fd727e8778688ddd068abd57305"
+    },
+    "marketing-automation": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "97c2784c68954341758c18f81b12e841aab67d5aafb7ea289547f9972d492d43"
+    },
+    "mcp-builder": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "fc68038c900eb801f73ff96130c9f9dba533cc94212ed8435833242f196dedcf"
+    },
+    "monitoring-observability": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "02f8bcb1e421ff843d44c09158f11609a81395f329050b78537f9e450ed291a3"
+    },
+    "npm-git-install": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "84c3c63cf6410d3096a6956cfbdece87117a23dcf0992add18082f648affbcce"
+    },
+    "oh-my-codex": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "8de9c88de637573625e5d2e95363bb7d113fd514317b78033e07d0728ace69d2"
+    },
+    "ohmg": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "448e1e263c912ddf20efc20a6ad91364f54dc3da13c03c53fc434f931701252a"
+    },
+    "omc": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "a51a4146782b8f8caeed924b89ec7d94f9daf6d226a71f76896ebbe41463c910"
+    },
+    "opencontext": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "43b1aa97033bb5075ca25d1cc37cc7e067e6cde81c3b147406a83ecd8d55c146"
+    },
+    "pattern-detection": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "3d2ed3d67170fc53e2189ae0dbf41a16e3b084a9fbd75c93879ff2a241d6a3c6"
+    },
+    "pdf": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "cfbc539377088ca7e44a813b30c306327385bbd973cd7a721e1743f60837dd62"
+    },
+    "performance-optimization": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "09c7d91422453692bf24f41bb9061fe95427257be9090f3db331ed00753ef734"
+    },
+    "plannotator": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "29a81425a48eabff58abcedeb0668187c3e246b058c7498222d3f5ee15dd4770"
+    },
+    "pollinations-ai": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "24e2be190294822ccad2ceedd387d40ccb87068639a6aef8f6ccca41646f02a0"
+    },
+    "pptx": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "6b8b859d26f93aa059c9870d1ab76b44ab69e3d6757ce4a03cc94cb760888073"
+    },
+    "presentation-builder": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "4c41fb94d686023e3fb747d1911206f7eb59c79fba88ed5a67d49d8f751fe66a"
+    },
+    "prompt-repetition": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "0924ca336c214a745217bc14366b61d9e59966289d74e66406712a9be06b6139"
+    },
+    "ralph": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "81363817f0730bcdc7979e29040ac0bab5a0cb1acdbe83333ffb093f54afb09b"
+    },
+    "ralphmode": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "2bbfaa958864e4fbab63a3fbb701a3e53a3d6c38c8e8b79073c30fd1bdb752b7"
+    },
+    "react-best-practices": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "ab195ae63aa162730a98441458ab991cdc2644b71ab7f3f66a20838cead57188"
+    },
+    "responsive-design": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "d4ea252119e54533462d81e7f745104290f2cf7c10ef2f429289c64089e24505"
+    },
+    "security-best-practices": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "9ce8a0cfa77e780241a88f74841d1f48b9aef443307617a62b59abbfcd871484"
+    },
+    "skill-creator": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "9b03bb78ec5c81c4e0546dbb78cfc970368c72dcae5482e8c59690175abbc8e7"
+    },
+    "skill-standardization": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "0d655940497dc3f14bc5afe04914e51c766fb1cb976073d975f0e3d112ba921e"
+    },
+    "slack-gif-creator": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "146d0f407e3f04aac0378b74bb238833b24bbd5e6387b932e82cfbf228f219b4"
+    },
+    "sprint-retrospective": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "d2635dda800b50f772771f47d387724181bc94f047b5c210df4d78d833329dd9"
+    },
+    "standup-meeting": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "98741c1de482344e5e4ce7d75960f90c68716e9ec32af9953b86358618b982c2"
+    },
+    "state-management": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "87ec1f7d423c86ee7d7908becd0b8abff1bb66fc9c76df08859d56c2d21f8030"
+    },
+    "system-environment-setup": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "454af0a9d31cd540be7541a3acb28bcb5a63763fbd09b700fe8f008c09ca144b"
+    },
+    "task-estimation": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "59ebb706fc02b735b4f3a076cedf9a36ca4d8466e469f429af2ab1ef38c7f1c4"
+    },
+    "task-planning": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "4e6e339cd69653604631cd00b9e7e7d3d4dffc19097f4d1ebfdf1ed32eb37110"
+    },
+    "technical-writing": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "0f4fb1976596822509e3ef98546250d89337bce036c99b0bae1f6598fe0a156c"
+    },
+    "template-skill": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "38c88f722b574a922311d334a70c2008a2a5b896f06eaa75516d716e5725b26f"
+    },
+    "testing-strategies": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "d341fb23dcc6365d0e009d281adc4180ed9dd5cd7ef1d7b27efc490f070f9ec5"
+    },
+    "theme-factory": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "93e78aa44f8fa00bb2c0608f400de1e1dcd6494611dd8ea27c867654240c7bcd"
+    },
+    "ui-component-patterns": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "6b88d73fede5b2e46ee764a4ecf1151011cdd64536454af9a8dd09d613426289"
+    },
+    "user-guide-writing": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "546ef4c2ac001c092e5841528a0a972e9560b41d9c6df49a2cd6c204422c1eaf"
+    },
+    "vercel-composition-patterns": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "f98931159fa9c7fed043bcd18a891a46dcf89ababa38df13a4c5b7b30dc0ce07"
+    },
+    "vercel-deploy": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "aca7707b91d072c33822e5de73458028a89a121c895d6cdafefb56aa1dfc4d1d"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "3462ec83f862abb2d532953df33a4dbf87f4616849da5d4b5cc7c13601aaf997"
+    },
+    "vercel-react-native-skills": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "2e9088a7333666d8c2833b8ff58bd51b955501c42b4c7244f72b4cbf22dafcc4"
+    },
+    "vibe-kanban": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "60d1e0bb983ff5e0b65862390b60e3d01a88cb062377a76c866b31f6bcea3a47"
+    },
+    "video-production": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "097aeaf1a3deb69400bfdb6d8f632214f816e42aff3d9890a3d5c5cd51a4bfa4"
+    },
+    "web-accessibility": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "b882434be86235fa7a082ded508145d28d07b1b053a1dfd4ad2d3fa3dc50246c"
+    },
+    "web-artifacts-builder": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "143730c6db11d82d8c5db4d0cf8f435421983f1fc510b24f77ee9a0e8bae7704"
+    },
+    "web-design-guidelines": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "8fe95b4106f13d6509a48ee8d37bcff76d94f37c9af0d734b9a41203a0c1a1f0"
+    },
+    "webapp-testing": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "cf8e5916d474886bd67b09691247f43f331523008b7d366064bc607ab42d6302"
+    },
+    "workflow-automation": {
+      "source": "supercent-io/skills-template",
+      "sourceType": "github",
+      "computedHash": "be89ab93ef6f690f9d5c3f59a653e080c2baaafee3d9b141091f90d37602b238"
+    },
+    "xlsx": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "efd0c8011cf0677d8075cf93867ecec804f9a8754a777e1d2fdb46197e9c247f"
+    }
+  }
+}

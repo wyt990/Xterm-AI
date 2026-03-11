@@ -1,0 +1,17 @@
+{
+  "ok": false,
+  "task_status": "failed",
+  "sandbox_path": "D:\\AI\\xterm\\.sandbox_runs\\task-31-da33c1f9",
+  "logs": [
+    {
+      "stage": "commands",
+      "command": "python -c \"import sys; sys.exit(1)\"",
+      "exit_code": 1,
+      "ok": false,
+      "stdout": "",
+      "stderr": "",
+      "elapsed_ms": 173
+    }
+  ],
+  "error_signature": "commands_failed"
+}

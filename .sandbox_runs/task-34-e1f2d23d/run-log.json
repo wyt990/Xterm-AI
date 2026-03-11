@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "task_status": "success",
+  "sandbox_path": "D:\\AI\\xterm\\.sandbox_runs\\task-34-e1f2d23d",
+  "logs": [
+    {
+      "stage": "db_migration",
+      "command": "stress_migration_1_1773157294229",
+      "ok": true,
+      "exit_code": 0,
+      "stdout": "migration applied",
+      "stderr": "",
+      "elapsed_ms": 0
+    },
+    {
+      "stage": "sync_to_repo",
+      "command": "sandbox->repo",
+      "ok": true,
+      "exit_code": 0,
+      "stdout": "changed_files=0",
+      "stderr": "",
+      "elapsed_ms": 0
+    }
+  ],
+  "error_signature": null,
+  "changed_files": [],
+  "migration": {
+    "enabled": true,
+    "ok": true,
+    "name": "stress_migration_1_1773157294229",
+    "db_path": "D:\\AI\\xterm\\config\\xterm.db",
+    "up_sql": "CREATE TABLE IF NOT EXISTS stress_migration_1_1773157294229(id INTEGER PRIMARY KEY);",
+    "down_sql": "DROP TABLE IF EXISTS stress_migration_1_1773157294229;"
+  }
+}

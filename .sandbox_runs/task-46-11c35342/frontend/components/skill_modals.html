@@ -1,0 +1,153 @@
+<!-- 弹窗：技能创建/编辑 -->
+<div id="skill-modal" class="modal">
+    <div class="modal-content" style="width: 640px; max-height: 88vh; overflow-y: auto;">
+        <div class="modal-header">
+            <h3 id="skill-modal-title">创建技能</h3>
+            <button type="button" class="close" onclick="closeModal('skill-modal')" aria-label="关闭">&times;</button>
+        </div>
+        <form id="skill-form">
+            <input type="hidden" name="id" id="skill-id">
+            <div class="form-group">
+                <label for="skill-name">技能标识 (name)</label>
+                <input id="skill-name" type="text" name="name" required placeholder="如：log-analysis（英文、小写、连字符）" pattern="[-a-z0-9_]+">
+                <small style="color: #888;">唯一标识，安装后不可修改</small>
+            </div>
+            <div class="form-group">
+                <label for="skill-display-name">展示名称</label>
+                <input id="skill-display-name" type="text" name="display_name" placeholder="如：日志分析">
+            </div>
+            <div class="form-group">
+                <label for="skill-description">简短描述（英文）</label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <input id="skill-description" type="text" name="description" placeholder="技能用途说明（如：Analyze application logs..." style="flex: 1;">
+                    <button type="button" class="btn btn-secondary" id="skill-translate-btn" onclick="translateSkillDescription()" title="将英文描述翻译为中文">
+                        <i class="fas fa-language"></i> 翻译为中文
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="skill-description-zh">中文描述（可选）</label>
+                <input id="skill-description-zh" type="text" name="description_zh" placeholder="如：分析应用日志，定位错误、性能问题...">
+                <small style="color: #888;">点击「翻译为中文」自动填充，或手动填写。离线/内网时请手动填写。</small>
+            </div>
+            <div class="form-group">
+                <div class="form-group-title">作用域标签（scope_tags）</div>
+                <div id="skill-scope-tags-list" style="display:flex; flex-wrap:wrap; gap:8px; padding:10px; background:#1e1e1e; border-radius:4px; border:1px solid #3c3c3c;">
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" name="scope_tags" value="ops" checked style="margin:0;">
+                        <span style="font-size:12px;">ops</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" name="scope_tags" value="task" style="margin:0;">
+                        <span style="font-size:12px;">task</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" name="scope_tags" value="plugin" style="margin:0;">
+                        <span style="font-size:12px;">plugin</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" name="scope_tags" value="evolution" style="margin:0;">
+                        <span style="font-size:12px;">evolution</span>
+                    </label>
+                </div>
+                <small style="color: #888;">默认勾选 ops。用于控制在哪些 AI 场景注入该技能。</small>
+            </div>
+            <div class="form-group" id="skill-device-type-group">
+                <div class="form-group-title">适用设备类型</div>
+                <div id="skill-device-type-list" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; background: #1e1e1e; border-radius: 4px; border: 1px solid #3c3c3c;">
+                    <!-- 由 JS 动态填充多选框 -->
+                </div>
+                <small style="color: #888; margin-top: 4px; display: block;">仅当连接的设备类型在勾选范围内时，该技能内容才会注入 AI 上下文。</small>
+            </div>
+            <div class="form-group">
+                <label for="skill-content">技能内容 (Markdown)</label>
+                <textarea id="skill-content" name="content" rows="12" style="font-family: monospace; font-size: 0.85rem;" placeholder="SKILL.md 正文，将作为知识库注入 AI..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-label" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" name="is_enabled" value="1" checked style="margin: 0;">
+                    <span>启用该技能</span>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('skill-modal')">取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 弹窗：技能商店 -->
+<div id="skill-store-modal" class="modal">
+    <div class="modal-content" style="width: 720px; max-height: 85vh; display: flex; flex-direction: column;">
+        <div class="modal-header">
+            <h3><i class="fas fa-store"></i> 技能商店</h3>
+            <button type="button" class="close" onclick="closeModal('skill-store-modal')" aria-label="关闭">&times;</button>
+        </div>
+        <div style="display: flex; border-bottom: 1px solid #3c3c3c;">
+            <button type="button" class="skill-store-tab active" data-tab="recommended" style="padding: 10px 16px; background: transparent; border: none; color: #ccc; cursor: pointer; border-bottom: 2px solid transparent;">推荐技能</button>
+            <button type="button" class="skill-store-tab" data-tab="github" style="padding: 10px 16px; background: transparent; border: none; color: #888; cursor: pointer;">GitHub 仓库</button>
+        </div>
+        <div style="flex: 1; overflow: auto; padding: 16px;">
+            <!-- 推荐技能 Tab -->
+            <div id="skill-store-recommended" class="skill-store-panel">
+                <div style="margin-bottom: 12px;">
+                    <input type="text" id="skill-store-query" placeholder="搜索技能..." style="width: 100%; padding: 8px 12px; background: #2d2d2d; border: 1px solid #3c3c3c; border-radius: 4px; color: #ccc;">
+                </div>
+                <div id="skill-store-recommended-list" class="role-grid" style="min-height: 120px;"></div>
+            </div>
+            <!-- GitHub Tab -->
+            <div id="skill-store-github" class="skill-store-panel" style="display: none;">
+                <div class="form-group">
+                    <label for="skill-store-repo">GitHub 仓库地址</label>
+                    <input type="text" id="skill-store-repo" placeholder="如：owner/repo 或 https://github.com/owner/repo" style="width: 100%; padding: 8px 12px;">
+                </div>
+                <div class="form-group">
+                    <label for="skill-store-token">GitHub Token（可选，提高 API 限流）</label>
+                    <input type="password" id="skill-store-token" placeholder="ghp_xxx" style="width: 100%; padding: 8px 12px;">
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="loadSkillsFromRepo()"><i class="fas fa-search"></i> 列出技能</button>
+                <div id="skill-store-github-list" class="role-grid" style="margin-top: 16px; min-height: 80px;"></div>
+            </div>
+        </div>
+        <div id="skill-store-install-panel" style="display: none; padding: 12px 16px; border-top: 1px solid #3c3c3c; background: #252525;">
+            <div class="form-group" id="skill-store-desc-zh-group" style="margin-bottom: 8px; display: none;">
+                <label for="skill-store-desc-zh">中文描述（可选）</label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" id="skill-store-desc-zh" placeholder="安装后可编辑补充" style="flex: 1; padding: 6px 10px;">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="translateStoreSkillDescription()"><i class="fas fa-language"></i> 翻译</button>
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 8px;">
+                <div class="form-group-title">作用域标签（scope_tags）</div>
+                <div id="skill-store-scope-tags-list" style="display:flex; flex-wrap:wrap; gap:8px;">
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" class="skill-store-scope-tag" value="ops" checked style="margin:0;">
+                        <span style="font-size:12px;">ops</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" class="skill-store-scope-tag" value="task" style="margin:0;">
+                        <span style="font-size:12px;">task</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" class="skill-store-scope-tag" value="plugin" style="margin:0;">
+                        <span style="font-size:12px;">plugin</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#2d2d2d; border-radius:3px; cursor:pointer;">
+                        <input type="checkbox" class="skill-store-scope-tag" value="evolution" style="margin:0;">
+                        <span style="font-size:12px;">evolution</span>
+                    </label>
+                </div>
+                <small style="color:#888;">默认勾选 ops。用于控制在哪些 AI 场景注入该技能。</small>
+            </div>
+            <div class="form-group" style="margin-bottom: 8px;">
+                <div class="form-group-title">选择适用设备类型</div>
+                <div id="skill-store-device-types" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="skillStoreCancelInstall()">取消</button>
+                <button type="button" class="btn btn-primary" id="skill-store-install-btn" onclick="skillStoreDoInstall()"><i class="fas fa-download"></i> 安装</button>
+            </div>
+        </div>
+    </div>
+</div>

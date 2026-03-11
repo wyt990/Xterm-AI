@@ -1,0 +1,43 @@
+<div id="evolution-task-detail-modal" class="modal">
+    <div class="modal-content" style="width: 900px; max-width: 95vw;">
+        <div class="modal-header">
+            <h3 id="evolution-task-detail-title">任务详情</h3>
+            <button type="button" class="close" onclick="closeModal('evolution-task-detail-modal')" aria-label="关闭">&times;</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 0;">
+            <div style="background:#252526;border:1px solid #333;border-radius:8px;padding:10px;">
+                <h4 style="margin:0 0 8px 0;color:#ddd;">任务信息</h4>
+                <div id="evolution-task-detail-basic" style="font-size:13px;color:#bbb;line-height:1.7;"></div>
+            </div>
+            <div style="background:#252526;border:1px solid #333;border-radius:8px;padding:10px;">
+                <h4 style="margin:0 0 8px 0;color:#ddd;">审批信息</h4>
+                <div id="evolution-task-detail-approval" style="font-size:13px;color:#bbb;line-height:1.7;"></div>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 0 12px 0;">
+            <div style="background:#252526;border:1px solid #333;border-radius:8px;padding:10px;">
+                <h4 style="margin:0 0 8px 0;color:#ddd;">失败总结</h4>
+                <div id="evolution-task-detail-failure" style="font-size:13px;color:#bbb;line-height:1.7;">-</div>
+            </div>
+            <div style="background:#252526;border:1px solid #333;border-radius:8px;padding:10px;">
+                <h4 style="margin:0 0 8px 0;color:#ddd;">人工接管建议</h4>
+                <div id="evolution-task-detail-human" style="font-size:13px;color:#bbb;line-height:1.7;">-</div>
+            </div>
+        </div>
+        <div style="background:#252526;border:1px solid #333;border-radius:8px;padding:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <h4 style="margin:0;color:#ddd;">Run 日志面板</h4>
+                <select id="evolution-run-order-select" style="max-width:180px;">
+                    <option value="desc">时间倒序（最新在前）</option>
+                    <option value="asc">时间正序（最早在前）</option>
+                </select>
+            </div>
+            <div id="evolution-run-stage-summary" style="font-size:12px;color:#9aa0a6;margin-bottom:8px;"></div>
+            <div id="evolution-task-runs-panel" style="max-height:300px;overflow:auto;font-size:12px;"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('evolution-task-detail-modal')">关闭</button>
+        </div>
+    </div>
+</div>
+

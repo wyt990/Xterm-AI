@@ -36,6 +36,7 @@ Thumbs.db
 dist/
 build/
 *.spec
+.sandbox_runs/
 
 # Static library files (optional - if you want to keep them in git, remove this)
 # static/lib/

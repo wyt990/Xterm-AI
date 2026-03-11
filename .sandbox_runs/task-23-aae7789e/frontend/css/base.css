@@ -1,0 +1,161 @@
+/* 基础重置与变量 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    /* 核心颜色 */
+    --bg-color: #1e1e1e;
+    --sidebar-bg: #252526;
+    --header-bg: #2d2d2d;
+    --border-color: #333333;
+    --primary-color: #0078d4;
+    --primary-hover: #006abc;
+    --secondary-bg: #3e3e42;
+    --secondary-hover: #454545;
+    --danger-color: #a80000;
+    --danger-hover: #8a0000;
+    --success-color: #107c10;
+    --warning-color: #ca5010;
+
+    /* 文字颜色 (提升对比度，符合 WCAG) */
+    --text-color: #f0f0f0;
+    --text-muted: #999999; /* 原为 #666 或 #bbb，统一提升到 #999 以上 */
+    --text-secondary: #cccccc;
+    
+    /* 间距准则 (4px 步进) */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+
+    /* 圆角与阴影 */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --shadow-sm: 0 2px 4px rgba(0,0,0,0.2);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+
+    /* 字体 */
+    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: 'Fira Code', 'Consolas', monospace;
+
+    /* 布局变量（支持响应式与 Resizer 联动） */
+    --sidebar-width: 200px;
+    --sidebar-width-collapsed: 60px;
+    --ai-section-width: 350px;
+
+    /* 动画 */
+    --transition-fast: 0.1s ease;
+    --transition-normal: 0.2s ease;
+}
+
+body, html {
+    height: 100%;
+    width: 100%;
+    font-family: var(--font-family);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    overflow: hidden;
+    line-height: 1.5;
+}
+
+/* 通用按钮样式 */
+.btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    transition: all var(--transition-normal);
+    user-select: none;
+    position: relative;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Loading 状态 */
+.btn.loading {
+    color: transparent !important;
+    pointer-events: none;
+}
+
+.btn.loading::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-top: -8px;
+    margin-left: -8px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+}
+
+.btn-secondary {
+    background-color: var(--secondary-bg);
+    color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+    background-color: var(--secondary-hover);
+    color: #fff;
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: var(--danger-hover);
+}
+
+.btn-sm {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 0.8rem;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 5px;
+    border: 2px solid #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #444;
+}

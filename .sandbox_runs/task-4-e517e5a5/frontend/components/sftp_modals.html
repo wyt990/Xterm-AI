@@ -1,0 +1,100 @@
+<!-- 弹窗：SFTP 重命名 -->
+<div id="sftp-rename-modal" class="modal">
+    <div class="modal-content" style="width: 400px;">
+        <div class="modal-header">
+            <h3>重命名</h3>
+            <button type="button" class="close" onclick="closeModal('sftp-rename-modal')" aria-label="关闭">&times;</button>
+        </div>
+        <form id="sftp-rename-form">
+            <input type="hidden" id="sftp-rename-old-path">
+            <div class="form-group"><label for="sftp-new-name">新名称</label><input type="text" id="sftp-new-name" required></div>
+            <div class="modal-footer"><button type="submit" class="btn btn-primary">确定</button></div>
+        </form>
+    </div>
+</div>
+
+<!-- 弹窗：SFTP 修改权限 -->
+<div id="sftp-chmod-modal" class="modal">
+    <div class="modal-content" style="width: 320px;">
+        <div class="modal-header">
+            <h3>修改权限</h3>
+            <button type="button" class="close" onclick="closeModal('sftp-chmod-modal')" aria-label="关闭">&times;</button>
+        </div>
+        <form id="sftp-chmod-form">
+            <input type="hidden" id="sftp-chmod-path">
+            <div class="chmod-filename" id="sftp-chmod-filename" style="font-weight: bold; margin-bottom: 15px; font-size: 1.1rem; word-break: break-all;">-</div>
+            
+            <div class="chmod-table">
+                <div class="chmod-group">
+                    <div class="chmod-group-label">所有者</div>
+                    <div class="chmod-checkboxes">
+                        <label><input type="checkbox" data-role="owner" data-type="read" onchange="updateChmodValue()"> 读取</label>
+                        <label><input type="checkbox" data-role="owner" data-type="write" onchange="updateChmodValue()"> 写入</label>
+                        <label><input type="checkbox" data-role="owner" data-type="execute" onchange="updateChmodValue()"> 执行</label>
+                    </div>
+                </div>
+                <div class="chmod-group">
+                    <div class="chmod-group-label">组</div>
+                    <div class="chmod-checkboxes">
+                        <label><input type="checkbox" data-role="group" data-type="read" onchange="updateChmodValue()"> 读取</label>
+                        <label><input type="checkbox" data-role="group" data-type="write" onchange="updateChmodValue()"> 写入</label>
+                        <label><input type="checkbox" data-role="group" data-type="execute" onchange="updateChmodValue()"> 执行</label>
+                    </div>
+                </div>
+                <div class="chmod-group">
+                    <div class="chmod-group-label">其他</div>
+                    <div class="chmod-checkboxes">
+                        <label><input type="checkbox" data-role="others" data-type="read" onchange="updateChmodValue()"> 读取</label>
+                        <label><input type="checkbox" data-role="others" data-type="write" onchange="updateChmodValue()"> 写入</label>
+                        <label><input type="checkbox" data-role="others" data-type="execute" onchange="updateChmodValue()"> 执行</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 15px;">
+                <label for="sftp-new-mode">权限值 (Octal)</label>
+                <input type="text" id="sftp-new-mode" required pattern="[0-7]{3,4}" title="请输入有效的八进制权限值" style="text-align: center; font-family: monospace; font-weight: bold; font-size: 1.1rem;">
+            </div>
+            <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">确定</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('sftp-chmod-modal')">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 弹窗：SFTP 新建文件/目录 -->
+<div id="sftp-create-modal" class="modal">
+    <div class="modal-content" style="width: 400px;">
+        <div class="modal-header">
+            <h3 id="sftp-create-title">新建</h3>
+            <button type="button" class="close" onclick="closeModal('sftp-create-modal')" aria-label="关闭">&times;</button>
+        </div>
+        <form id="sftp-create-form">
+            <input type="hidden" id="sftp-create-type">
+            <div class="form-group">
+                <label id="sftp-create-label" for="sftp-create-name">名称</label>
+                <input type="text" id="sftp-create-name" required placeholder="请输入名称">
+            </div>
+            <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">创建</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('sftp-create-modal')">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- SFTP 右键菜单 -->
+<div id="sftp-context-menu" class="context-menu">
+    <div id="sftp-file-ops">
+        <button type="button" class="context-menu-item" onclick="sftpAction('download')"><i class="fas fa-download"></i> 下载</button>
+        <button type="button" class="context-menu-item" onclick="sftpAction('edit')"><i class="fas fa-edit"></i> 编辑</button>
+        <button type="button" class="context-menu-item" onclick="sftpAction('rename')"><i class="fas fa-file-signature"></i> 重命名</button>
+        <button type="button" class="context-menu-item" onclick="sftpAction('chmod')"><i class="fas fa-key"></i> 修改权限</button>
+        <div class="context-menu-separator"></div>
+    </div>
+    <button type="button" class="context-menu-item" onclick="sftpAction('newfile')"><i class="fas fa-file-alt"></i> 新建文件</button>
+    <button type="button" class="context-menu-item" onclick="sftpAction('newdir')"><i class="fas fa-folder-plus"></i> 新建目录</button>
+    <div class="context-menu-separator"></div>
+    <button type="button" id="sftp-delete-op" class="context-menu-item danger" onclick="sftpAction('delete')"><i class="fas fa-trash-alt"></i> 删除</button>
+</div>

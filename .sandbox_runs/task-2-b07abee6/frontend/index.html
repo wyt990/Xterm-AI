@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XTerm-AI - 智能运维终端</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💻</text></svg>">
+    <link rel="stylesheet" href="/static/css/xterm.css?v=1.2">
+    <link rel="stylesheet" href="/static/lib/fontawesome/css/all.min.css?v=1.2">
+    <!-- 拆分后的模块化样式表 -->
+    <link rel="stylesheet" href="/frontend/css/base.css?v=1.3">
+    <link rel="stylesheet" href="/frontend/css/modals.css?v=1.5">
+    <link rel="stylesheet" href="/frontend/css/layout.css?v=1.3">
+    <link rel="stylesheet" href="/frontend/css/terminal.css?v=1.5">
+    <link rel="stylesheet" href="/frontend/css/ai_chat.css?v=1.3">
+    <link rel="stylesheet" href="/frontend/css/sftp.css?v=1.6">
+    <link rel="stylesheet" href="/frontend/css/editor.css?v=2.2">
+    <link rel="stylesheet" href="/frontend/css/responsive.css?v=1.0">
+</head>
+<body>
+    <div class="app-shell">
+        <!-- 侧边导航栏 -->
+        <nav class="sidebar" id="sidebar">
+            <div class="nav-brand">
+                <i class="fas fa-terminal"></i>
+                <span>XTerm-AI</span>
+                <button id="toggle-sidebar" class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-view="terminal-view">
+                    <i class="fas fa-terminal"></i>
+                    <span>控制台</span>
+                </li>
+                <li class="nav-item" data-view="server-list-view">
+                    <i class="fas fa-server"></i>
+                    <span>服务器管理</span>
+                </li>
+                <li class="nav-item" data-view="ai-dialog-view">
+                    <i class="fas fa-comments"></i>
+                    <span>AI对话</span>
+                </li>
+                <li class="nav-item" data-view="task-center-view">
+                    <i class="fas fa-list-check"></i>
+                    <span>任务中心</span>
+                </li>
+                <li class="nav-item" data-view="plugin-center-view">
+                    <i class="fas fa-plug"></i>
+                    <span>插件中心</span>
+                </li>
+                <li class="nav-item" data-view="roles-view">
+                    <i class="fas fa-robot"></i>
+                    <span>AI 角色</span>
+                </li>
+                <li class="nav-item" data-view="skills-view">
+                    <i class="fas fa-puzzle-piece"></i>
+                    <span>技能管理</span>
+                </li>
+                <li class="nav-item" data-view="model-settings-view">
+                    <i class="fas fa-brain"></i>
+                    <span>模型设置</span>
+                </li>
+                <li class="nav-item" data-view="settings-view">
+                    <i class="fas fa-cog"></i>
+                    <span>系统设置</span>
+                </li>
+            </ul>
+        </nav>
+
+        <div id="sidebar-resizer" class="resizer"></div>
+
+        <!-- 主内容区域 -->
+        <main class="content">
+            <!-- 终端视图 -->
+            <div id="terminal-view" class="view active">
+                <div class="app-container">
+                    <div class="terminal-section">
+                        <!-- 标签栏 -->
+                        <div class="tab-bar" id="tab-bar">
+                            <button type="button" class="add-tab-btn" onclick="showQuickConnect()" title="新建标签页" aria-label="新建标签页">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+
+                        <!-- 终端容器堆栈 -->
+                        <div id="terminal-stack">
+                            <!-- 快速连接 / 历史记录页面 -->
+                            <div id="quick-connect-page" class="view active">
+                                <div class="quick-connect-container">
+                                    <div class="quick-connect-header">
+                                        <h2><i class="fas fa-history"></i> 最近连接</h2>
+                                        <button class="btn-clear-history" onclick="clearConnectionHistory()" title="清空历史"><i class="fas fa-trash-alt"></i></button>
+                                    </div>
+                                    <div id="connection-history-list" class="history-grid">
+                                        <!-- 历史记录列表 -->
+                                        <div class="empty-tip">暂无最近连接记录</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 底部交互面板的分隔线 -->
+                        <div id="bottom-panel-resizer" class="resizer-h"></div>
+                        
+                        <!-- 底部交互面板 -->
+                        <div id="bottom-panel" class="bottom-panel">
+                            <div class="bottom-panel-header">
+                                <div class="panel-tabs">
+                                    <div class="panel-tab active" data-panel="sftp-panel">文件</div>
+                                    <div class="panel-tab" data-panel="commands-panel">命令</div>
+                                </div>
+                                <button class="toggle-btn-small" id="toggle-bottom-panel" title="折叠/展开"><i class="fas fa-chevron-down"></i></button>
+                            </div>
+                            
+                            <!-- SFTP 文件管理器 -->
+                            <div id="sftp-panel" class="bottom-panel-content sftp-container active">
+                                <div class="sftp-toolbar">
+                                    <button class="btn-icon" onclick="sftpGoBack()" title="返回上级"><i class="fas fa-arrow-left"></i></button>
+                                    <button class="btn-icon" onclick="sftpRefresh()" title="刷新"><i class="fas fa-sync-alt"></i></button>
+                                    <div class="sftp-address-bar">
+                                        <i class="fas fa-folder-open" style="color: #666; margin-right: 8px;"></i>
+                                        <input type="text" id="sftp-current-path" value="/" onkeydown="if(event.keyCode==13) loadSftpFiles(this.value)">
+                                    </div>
+                                    <button class="btn btn-sm btn-primary" onclick="showUploadModal()" title="上传文件"><i class="fas fa-upload"></i> 上传</button>
+                                    <input type="file" id="sftp-upload-input" multiple style="display: none;" onchange="handleSftpUpload(event)">
+                                </div>
+                                <div class="sftp-file-list" id="sftp-file-list">
+                                    <!-- 文件列表头 -->
+                                    <div class="sftp-file-item header" style="font-weight: bold; border-bottom: 1px solid #333; position: sticky; top: 0; background: #1e1e1e; z-index: 5;">
+                                        <span class="file-icon"></span>
+                                        <span class="file-name">名称</span>
+                                        <span class="file-size">大小</span>
+                                        <span class="file-perms">权限</span>
+                                        <span class="file-time">修改时间</span>
+                                    </div>
+                                    <div id="sftp-files-container">
+                                        <!-- 动态加载文件内容 -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 常用命令列表 -->
+                            <div id="commands-panel" class="bottom-panel-content commands-container">
+                                <div class="commands-layout" style="display: flex; height: 100%;">
+                                    <div class="commands-sidebar" style="width: 150px; border-right: 1px solid #333; overflow-y: auto;">
+                                        <div class="commands-sidebar-header" style="padding: 8px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
+                                            <span style="font-size: 12px; color: #888;">分类</span>
+                                            <button type="button" style="cursor: pointer; color: #0078d4; background: transparent; border: 0; padding: 0;" onclick="showAddCommandGroupModal()" title="添加分类" aria-label="添加分类">
+                                                <i class="fas fa-plus-circle"></i>
+                                            </button>
+                                        </div>
+                                        <div id="command-groups-list">
+                                            <!-- 分组列表 -->
+                                        </div>
+                                    </div>
+                                    <div class="commands-main" style="flex: 1; overflow-y: auto; padding: 10px;">
+                                        <div class="commands-main-header" style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                                            <span id="current-group-name" style="font-weight: bold; color: #eee;">常用命令</span>
+                                            <button class="btn btn-sm btn-primary" onclick="showAddCommandModal()"><i class="fas fa-plus"></i> 添加命令</button>
+                                        </div>
+                                        <div id="commands-grid" class="commands-grid">
+                                            <!-- 命令磁贴列表 -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="ai-resizer" class="resizer"></div>
+
+                    <!-- AI 面板折叠/展开浮动按钮（始终可见，不受 overflow:hidden 影响） -->
+                    <div id="ai-toggle-strip" title="折叠/展开 AI 面板">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+
+                    <!-- 右侧 AI 对话栏 -->
+                    <div class="ai-section" id="ai-section">
+                        <!-- 标签页 -->
+                        <div class="stats-tabs">
+                            <div class="stats-tab active" data-tab="ai-chat">AI 对话</div>
+                            <div class="stats-tab" data-tab="sys-info">系统信息</div>
+                        </div>
+                        
+                        <div id="ai-chat-view" class="stats-tab-content active">
+                            <div class="ai-header">
+                                <div class="ai-header-left">
+                                    <div class="status-dot" id="ai-status"></div>
+                                    <span class="ai-header-title">智能运维助手</span>
+                                </div>
+                                <select id="ai-role-select" class="ai-role-select" title="切换角色（仅影响本会话）">
+                                    <!-- 由 JS 动态填充 -->
+                                </select>
+                            </div>
+                            <div class="ai-messages" id="ai-messages">
+                                <!-- 消息内容 -->
+                            </div>
+                            <div class="ai-input-area">
+                                <textarea id="ai-input" placeholder="向AI助手提问... (Enter 发送, Shift+Enter 换行)"></textarea>
+                                <div class="ai-input-toolbar">
+                                    <div class="ai-toolbar-left">
+                                        <select id="ai-mode-select" class="ai-mode-select" title="选择对话模式">
+                                            <option value="agent">Agent</option>
+                                            <option value="ask">Ask</option>
+                                        </select>
+                                        <button id="clear-chat-btn" class="ai-toolbar-btn" title="清空本会话对话" onclick="clearChat()">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                        <button id="server-doc-btn" class="ai-toolbar-btn" title="服务器环境文档（需先连接服务器）" disabled onclick="showServerDocModal()">
+                                            <i class="fas fa-file-alt"></i>
+                                        </button>
+                                    </div>
+                                    <button id="send-btn" title="发送 (Enter)">
+                                        <i class="fas fa-paper-plane"></i><span>发送</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="sys-info-view" class="stats-tab-content">
+                            <!-- 系统信息视图内容 -->
+                            <div class="info-container">
+                                <div class="info-section">
+                                    <div class="info-row"><span>主机名:</span> <span id="info-hostname">-</span></div>
+                                    <div class="info-row"><span>系统:</span> <span id="info-os">-</span></div>
+                                    <div class="info-row"><span>运行时间:</span> <span id="info-uptime">-</span></div>
+                                    <div class="info-row"><span>内网 IP:</span> <span id="info-ip">-</span></div>
+                                    <div class="info-row"><span>平均负载:</span> <span id="info-load">-</span></div>
+                                </div>
+                                
+                                <div class="info-section">
+                                    <div class="gauge-label">CPU <span id="info-cpu-val">0%</span></div>
+                                    <div class="gauge-bar"><div id="info-cpu-bar" class="gauge-fill" style="width: 0%"></div></div>
+                                    
+                                    <div class="gauge-label">内存 <span id="info-mem-val">0/0</span></div>
+                                    <div class="gauge-bar"><div id="info-mem-bar" class="gauge-fill" style="width: 0%"></div></div>
+                                    
+                                    <div class="gauge-label">根分区 <span id="info-disk-val">0/0</span></div>
+                                    <div class="gauge-bar"><div id="info-disk-bar" class="gauge-fill" style="width: 0%"></div></div>
+                                </div>
+
+                                <!-- 监控趋势图 -->
+                                <div class="info-section trend-charts">
+                                    <div class="chart-container" style="height: 120px; margin-bottom: 15px;">
+                                        <canvas id="cpu-trend-chart"></canvas>
+                                    </div>
+                                    <div class="chart-container" style="height: 120px;">
+                                        <canvas id="mem-trend-chart"></canvas>
+                                    </div>
+                                </div>
+
+                                <div class="info-section">
+                                    <table class="proc-table">
+                                        <thead>
+                                            <tr>
+                                                <th class="sortable" data-sort="mem">内存 <i class="fas fa-sort"></i></th>
+                                                <th class="sortable" data-sort="cpu">CPU <i class="fas fa-sort"></i></th>
+                                                <th class="sortable" data-sort="cmd">命令 <i class="fas fa-sort"></i></th>
+                                                <th style="width: 50px;">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="proc-list">
+                                            <!-- 进程列表 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 服务器列表视图 -->
+            <div id="server-list-view" class="view">
+                <div class="view-header">
+                    <h2>服务器资产管理</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="showDeviceTypeMgr()" style="margin-right: 10px;">
+                            <i class="fas fa-cogs"></i> 系统类型管理
+                        </button>
+                        <button class="btn btn-primary" onclick="showAddServerModal()">
+                            <i class="fas fa-plus"></i> 添加服务器
+                        </button>
+                    </div>
+                </div>
+                <div class="server-groups" id="server-list-container"></div>
+            </div>
+
+            <!-- AI 对话主入口视图 -->
+            <div id="ai-dialog-view" class="view">
+                <div class="view-header">
+                    <h2>AI对话（控制平面入口）</h2>
+                </div>
+                <div class="settings-container" style="padding: 20px;">
+                    <div style="background:#252526;border:1px solid #333;border-radius:8px;padding:16px;color:#ccc;">
+                        <p style="margin:0 0 12px 0;">
+                            该入口用于承接面向进化系统的主对话流程。当前阶段（Phase A）先提供任务中心闭环能力，
+                            你也可以继续使用右侧 AI 面板进行运维对话。
+                        </p>
+                        <ul style="margin:0;padding-left:20px;color:#aaa;">
+                            <li>建议通过“任务中心”创建与执行自进化任务</li>
+                            <li>高风险任务需审批后执行</li>
+                            <li>失败任务按默认重试上限 100 进行治理</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 任务中心视图 -->
+            <div id="task-center-view" class="view">
+                <div class="view-header">
+                    <h2>任务中心（Phase A/B/D）</h2>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <select id="evolution-status-filter">
+                            <option value="">全部状态</option>
+                            <option value="pending_approval">pending_approval</option>
+                            <option value="approved">approved</option>
+                            <option value="running">running</option>
+                            <option value="failed">failed</option>
+                            <option value="success">success</option>
+                            <option value="blocked_manual">blocked_manual</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="resetEvolutionDemo()">重置到干净状态</button>
+                        <button class="btn btn-secondary" onclick="seedEvolutionDemo()">生成演示数据</button>
+                        <button class="btn btn-secondary" onclick="loadEvolutionTasks()">刷新</button>
+                    </div>
+                </div>
+                <div class="settings-container" style="padding:20px;display:flex;flex-direction:column;gap:16px;">
+                    <div style="background:#252526;border:1px solid #333;border-radius:8px;padding:10px;display:flex;justify-content:space-between;align-items:center;">
+                        <strong style="font-size:13px;color:#ddd;">队列执行状态（Phase B）</strong>
+                        <div id="evolution-queue-status" style="display:flex;gap:12px;color:#9aa0a6;font-size:12px;">
+                            <span>队列: 0</span>
+                            <span>运行中: 0</span>
+                            <span>Worker: 1</span>
+                            <span>已处理: 0</span>
+                            <span>失败: 0</span>
+                        </div>
+                    </div>
+                    <div style="background:#252526;border:1px solid #333;border-radius:8px;padding:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                        <strong style="font-size:13px;color:#ddd;">自动调度（Phase B）</strong>
+                        <label style="font-size:12px;color:#aaa;">启用
+                            <input id="evolution-scheduler-enabled" type="checkbox" checked />
+                        </label>
+                        <label style="font-size:12px;color:#aaa;">间隔秒
+                            <input id="evolution-scheduler-interval" type="number" value="30" min="1" style="width:80px;" />
+                        </label>
+                        <label style="font-size:12px;color:#aaa;">每轮任务数
+                            <input id="evolution-scheduler-max-tasks" type="number" value="3" min="1" style="width:80px;" />
+                        </label>
+                        <label style="font-size:12px;color:#aaa;">失败重试间隔(秒)
+                            <input id="evolution-retry-delay" type="number" value="60" min="0" style="width:80px;" />
+                        </label>
+                        <button class="btn btn-secondary" onclick="saveEvolutionSchedulerConfig()">保存调度配置</button>
+                        <button class="btn btn-secondary" onclick="runEvolutionSchedulerOnce()">调度执行一次</button>
+                        <span id="evolution-scheduler-status" style="font-size:12px;color:#9aa0a6;"></span>
+                    </div>
+                    <div style="background:#252526;border:1px solid #333;border-radius:8px;padding:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                        <strong style="font-size:13px;color:#ddd;">Phase D 工具区</strong>
+                        <button class="btn btn-secondary" onclick="loadEvolutionOpsTemplates()">加载运维模板</button>
+                        <button class="btn btn-secondary" onclick="loadEvolutionExperiences()">刷新经验库</button>
+                        <button class="btn btn-secondary" onclick="loadEvolutionFailureReports()">刷新失败报告</button>
+                        <button class="btn btn-secondary" onclick="loadEvolutionSchemaMigrations()">刷新迁移审计</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(3,minmax(260px,1fr));gap:10px;">
+                        <div style="border:1px solid #333;border-radius:8px;background:#252526;padding:10px;">
+                            <h4 style="margin:0 0 8px;color:#ddd;">运维模板（Phase D）</h4>
+                            <div id="evolution-ops-templates" style="max-height:180px;overflow:auto;font-size:12px;color:#bbb;"></div>
+                        </div>
+                        <div style="border:1px solid #333;border-radius:8px;background:#252526;padding:10px;">
+                            <h4 style="margin:0 0 8px;color:#ddd;">经验库（最近）</h4>
+                            <div id="evolution-experience-list" style="max-height:180px;overflow:auto;font-size:12px;color:#bbb;"></div>
+                        </div>
+                        <div style="border:1px solid #333;border-radius:8px;background:#252526;padding:10px;">
+                            <h4 style="margin:0 0 8px;color:#ddd;">失败报告与迁移审计</h4>
+                            <div id="evolution-failure-reports" style="max-height:84px;overflow:auto;font-size:12px;color:#bbb;margin-bottom:8px;"></div>
+                            <div id="evolution-schema-migrations" style="max-height:84px;overflow:auto;font-size:12px;color:#bbb;"></div>
+                        </div>
+                    </div>
+                    <div class="evo-chip-group">
+                        <button class="evo-chip active" data-status="">全部</button>
+                        <button class="evo-chip" data-status="pending_approval">待审批</button>
+                        <button class="evo-chip" data-status="approved">已审批</button>
+                        <button class="evo-chip" data-status="running">执行中</button>
+                        <button class="evo-chip" data-status="failed">失败</button>
+                        <button class="evo-chip" data-status="success">成功</button>
+                        <button class="evo-chip" data-status="blocked_manual">人工接管</button>
+                    </div>
+                    <form id="evolution-task-create-form" style="display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:10px;background:#252526;border:1px solid #333;border-radius:8px;padding:14px;">
+                        <input name="title" placeholder="任务标题（必填）" />
+                        <input name="description" placeholder="任务描述" />
+                        <select name="source">
+                            <option value="user">user</option>
+                            <option value="system">system</option>
+                            <option value="plugin">plugin</option>
+                        </select>
+                        <select name="task_type">
+                            <option value="fix">fix</option>
+                            <option value="feature">feature</option>
+                            <option value="self_modify_frontend">self_modify_frontend</option>
+                            <option value="self_modify_backend">self_modify_backend</option>
+                            <option value="self_modify_db_schema">self_modify_db_schema</option>
+                        </select>
+                        <select name="scope">
+                            <option value="frontend">frontend</option>
+                            <option value="backend">backend</option>
+                            <option value="db">db</option>
+                            <option value="mixed">mixed</option>
+                        </select>
+                        <select name="risk_level">
+                            <option value="low">low</option>
+                            <option value="medium">medium</option>
+                            <option value="high">high</option>
+                        </select>
+                        <input name="acceptance_criteria" placeholder="验收标准" />
+                        <input name="rollback_plan" placeholder="回滚方案" />
+                        <input name="max_retries" type="number" value="100" min="1" />
+                        <input name="payload_json" placeholder='payload_json，例如 {"execution_backend":"auto"}' />
+                        <div style="grid-column:1 / -1;">
+                            <button type="submit" class="btn btn-primary">创建任务</button>
+                        </div>
+                    </form>
+
+                    <div style="overflow:auto;border:1px solid #333;border-radius:8px;">
+                        <table style="width:100%;border-collapse:collapse;">
+                            <thead style="background:#252526;">
+                                <tr>
+                                    <th style="padding:10px;text-align:left;">ID</th>
+                                    <th style="padding:10px;text-align:left;">标题</th>
+                                    <th style="padding:10px;text-align:left;">风险</th>
+                                    <th style="padding:10px;text-align:left;">状态</th>
+                                    <th style="padding:10px;text-align:left;">审批</th>
+                                    <th style="padding:10px;text-align:left;">重试</th>
+                                    <th style="padding:10px;text-align:left;">来源</th>
+                                    <th style="padding:10px;text-align:left;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="evolution-task-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 插件中心视图 -->
+            <div id="plugin-center-view" class="view">
+                <div class="view-header">
+                    <h2>插件中心（Phase C）</h2>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-secondary" onclick="loadPlugins()">刷新</button>
+                    </div>
+                </div>
+                <div class="settings-container" style="padding:20px;display:grid;grid-template-columns:1.1fr 0.9fr;gap:16px;">
+                    <div style="overflow:auto;border:1px solid #333;border-radius:8px;">
+                        <table style="width:100%;border-collapse:collapse;">
+                            <thead style="background:#252526;">
+                                <tr>
+                                    <th style="padding:10px;text-align:left;">插件ID</th>
+                                    <th style="padding:10px;text-align:left;">名称</th>
+                                    <th style="padding:10px;text-align:left;">版本</th>
+                                    <th style="padding:10px;text-align:left;">运行时</th>
+                                    <th style="padding:10px;text-align:left;">状态</th>
+                                    <th style="padding:10px;text-align:left;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="plugin-list-body"></tbody>
+                        </table>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        <div style="border:1px solid #333;border-radius:8px;padding:12px;background:#252526;">
+                            <h3 style="margin:0 0 10px;">安装插件</h3>
+                            <label for="plugin-manifest-input" style="display:block;color:#aaa;font-size:12px;margin-bottom:6px;">manifest JSON</label>
+                            <textarea id="plugin-manifest-input" style="width:100%;min-height:130px;background:#1e1e1e;color:#ddd;border:1px solid #333;border-radius:6px;padding:8px;">{
+  "plugin_id": "switch-port-guardian",
+  "name": "交换机端口守护",
+  "version": "0.1.0",
+  "runtime": "python",
+  "entrypoint": "main.py",
+  "capabilities": ["network.inspect", "task.submit"],
+  "schedules": [{"name":"巡检任务","cron":"0 */5 * * * *","task_template_key":"switch_inspect"}],
+  "task_templates": [{"key":"switch_inspect","title":"交换机端口巡检","risk_level":"medium","task_type":"feature","payload":{"target":"core-switch"}}]
+}</textarea>
+                            <label for="plugin-files-input" style="display:block;color:#aaa;font-size:12px;margin:10px 0 6px;">files JSON（可选）</label>
+                            <textarea id="plugin-files-input" style="width:100%;min-height:80px;background:#1e1e1e;color:#ddd;border:1px solid #333;border-radius:6px;padding:8px;">{
+  "main.py": "print('switch-port-guardian loaded')"
+}</textarea>
+                            <button id="install-plugin-btn" class="btn btn-primary" style="margin-top:10px;">安装插件</button>
+                        </div>
+                        <div id="plugin-detail-panel" style="border:1px solid #333;border-radius:8px;padding:12px;background:#252526;color:#ddd;">
+                            <div style="color:#8a8a8a;">选择左侧插件查看详情</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 角色管理视图 -->
+            <div id="roles-view" class="view">
+                <div class="view-header">
+                    <h2>AI 角色管理</h2>
+                    <button class="btn btn-primary" onclick="showAddRoleModal()">
+                        <i class="fas fa-plus"></i> 创建角色
+                    </button>
+                </div>
+                <div class="settings-container" style="padding: 20px;">
+                    <div id="role-list-container" class="role-grid"></div>
+                </div>
+            </div>
+
+            <!-- 技能管理视图 -->
+            <div id="skills-view" class="view">
+                <div class="view-header">
+                    <h2>技能管理</h2>
+                    <small style="color: #888; font-weight: normal; margin-left: 8px;">支持从商店安装、翻译为中文；离线/内网时可手动填写描述</small>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="skill-filter-device" style="padding: 6px 10px; background: #2d2d2d; border: 1px solid #3c3c3c; border-radius: 4px; color: #ccc;">
+                            <option value="">全部设备类型</option>
+                        </select>
+                        <select id="skill-filter-enabled" style="padding: 6px 10px; background: #2d2d2d; border: 1px solid #3c3c3c; border-radius: 4px; color: #ccc;">
+                            <option value="">全部状态</option>
+                            <option value="1">已启用</option>
+                            <option value="0">已禁用</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="loadSkills()" title="刷新"><i class="fas fa-sync-alt"></i></button>
+                        <button class="btn btn-secondary" onclick="showSkillStoreModal()">
+                            <i class="fas fa-store"></i> 从商店安装
+                        </button>
+                        <button class="btn btn-primary" onclick="showAddSkillModal()">
+                            <i class="fas fa-plus"></i> 创建技能
+                        </button>
+                    </div>
+                </div>
+                <div class="settings-container" style="padding: 20px;">
+                    <div id="skill-list-container" class="role-grid"></div>
+                </div>
+            </div>
+
+            <!-- 模型设置视图 -->
+            <div id="model-settings-view" class="view">
+                <div class="view-header">
+                    <h2>模型端点管理</h2>
+                    <button class="btn btn-primary" onclick="showAddAIModal()">
+                        <i class="fas fa-plus"></i> 添加端点
+                    </button>
+                </div>
+                <div class="settings-container" style="padding: 20px;">
+                    <div id="ai-list-container" class="ai-list"></div>
+                </div>
+            </div>
+
+            <!-- 系统设置视图 -->
+            <div id="settings-view" class="view">
+                <div class="view-header">
+                    <h2>系统设置</h2>
+                </div>
+                <div class="settings-container" style="padding: 20px;">
+                    <section class="settings-section">
+                        <h3 style="margin-bottom: 15px; color: #0078d4;">日志设置</h3>
+                        <form id="system-settings-form">
+                            <div class="form-group">
+                                <label for="log-enabled">日志开关</label>
+                                <select id="log-enabled" name="log_enabled">
+                                    <option value="1">开启</option>
+                                    <option value="0">关闭</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="log-level">日志级别</label>
+                                <select id="log-level" name="log_level">
+                                    <option value="DEBUG">DEBUG (详细调试，记录 AI 原始内容)</option>
+                                    <option value="INFO">INFO (普通信息)</option>
+                                    <option value="WARNING">WARNING (警告)</option>
+                                    <option value="ERROR">ERROR (错误)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="log-path">日志保存目录</label>
+                                <input id="log-path" type="text" name="log_path" placeholder="../logs">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="log-max-size">单文件最大大小 (MB)</label>
+                                    <input id="log-max-size" type="number" name="log_max_size" value="10">
+                                </div>
+                                <div class="form-group">
+                                    <label for="log-backup-count">保留文件数</label>
+                                    <input id="log-backup-count" type="number" name="log_backup_count" value="10">
+                                </div>
+                            </div>
+                            <div class="modal-footer" style="padding: 0; border: none; margin-top: 20px; justify-content: flex-start; gap: 10px;">
+                                <button type="submit" class="btn btn-primary">保存系统设置</button>
+                                <button type="button" class="btn btn-secondary" onclick="showLogsModal()">查看系统日志</button>
+                                <button type="button" class="btn btn-danger" onclick="handleClearLogs()">清空所有日志</button>
+                                <button type="button" class="btn btn-secondary" onclick="handleBackupDatabase()"><i class="fas fa-database"></i> 备份数据库</button>
+                            </div>
+                        </form>
+                    </section>
+                    <section class="settings-section" style="margin-top: 30px;">
+                        <h3 style="margin-bottom: 15px; color: #0078d4;">代理设置</h3>
+                        <p style="color: #888; font-size: 13px; margin-bottom: 12px;">配置代理后，可将代理绑定到终端、AI 对话、技能等场景。支持 HTTP 和 SOCKS5 类型。若 AI 无法使用且未勾选「AI 对话」，可点击「清除 AI 代理绑定」修复残留配置。</p>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;">
+                            <button type="button" class="btn btn-primary" onclick="showAddProxyModal()">
+                                <i class="fas fa-plus"></i> 添加代理
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="handleClearAiProxy()" title="修复：未勾选 AI 对话但 AI 仍异常时使用">
+                                <i class="fas fa-unlink"></i> 清除 AI 代理绑定
+                            </button>
+                        </div>
+                        <div id="proxy-list-container" class="role-grid" style="min-height: 60px;">
+                            <!-- 代理列表由 JS 动态填充 -->
+                        </div>
+                    </section>
+                    <section class="settings-section" style="margin-top: 30px;">
+                        <h3 style="margin-bottom: 15px; color: #0078d4;">测试与数据维护</h3>
+                        <p style="color: #888; font-size: 13px; margin-bottom: 12px;">清除所有服务器的监控状态历史（CPU、内存、磁盘趋势图数据），适用于测试后清理或重新采集。</p>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button type="button" class="btn btn-secondary" onclick="handleBackupDatabase()">
+                                <i class="fas fa-database"></i> 备份数据库
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="handleClearAllStatsHistory()">
+                                <i class="fas fa-eraser"></i> 清除所有服务器状态记录
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 动态注入弹窗组件的占位符 -->
+    <div id="component-placeholder"></div>
+
+    <script src="/static/js/xterm.js"></script>
+    <script src="/static/js/xterm-addon-fit.js"></script>
+    <script src="/static/js/marked.min.js"></script>
+    <script src="/static/js/chart.min.js"></script>
+    <script src="/static/lib/ace/ace.js"></script>
+    <script src="/static/lib/ace/ext-language_tools.js"></script>
+    <script src="/static/lib/ace/ext-modelist.js"></script>
+    <script src="/static/lib/ace/ext-searchbox.js"></script>
+
+    <!-- 主程序入口 (ES Modules) -->
+    <script type="module" src="/frontend/app.js?v=1.9"></script>
+</body>
+</html>
